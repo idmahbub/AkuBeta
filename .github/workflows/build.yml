@@ -32,11 +32,15 @@ jobs:
             - name: Download FFmpeg (Windows)
               if: runner.os == 'Windows'
               run: |
-                  mkdir bin
-                  curl -L -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
-                  powershell -Command "Expand-Archive ffmpeg.zip -DestinationPath ffmpeg"
-                  copy ffmpeg\*\bin\ffmpeg.exe bin\
-                  copy ffmpeg\*\bin\ffprobe.exe bin\
+                if (!(Test-Path bin)) { New-Item -ItemType Directory -Path bin }
+            
+                curl -L -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+            
+                powershell -Command "Expand-Archive ffmpeg.zip -DestinationPath ffmpeg"
+            
+                Copy-Item ffmpeg\*\bin\ffmpeg.exe bin\
+                Copy-Item ffmpeg\*\bin\ffprobe.exe bin\
+          
 
             # ================= MAC / LINUX FFMPEG =================
 
