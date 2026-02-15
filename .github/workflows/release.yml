@@ -26,7 +26,6 @@ jobs:
         run: |
           git fetch --tags
           latest=$(git tag --sort=-v:refname | head -n 1)
-
           if [ -z "$latest" ]; then
             new_tag="v1.0.0"
           else
@@ -37,12 +36,8 @@ jobs:
           fi
 
           echo "New tag: $new_tag"
-
-          # Push tag ke repo
           git tag $new_tag
           git push origin $new_tag
-
-          # Set output untuk job lain
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
   # =========================
@@ -68,16 +63,21 @@ jobs:
         run: |
           pip install pyinstaller yt-dlp
 
-      # Build untuk masing-masing OS
-      - name: Build app
-        run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
-          else
-            pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts:fonts" --add-data "bin:bin"
-          fi
+      # ---------- Build per OS tanpa if bash ----------
+      - name: Build Windows
+        if: runner.os == 'Windows'
+        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
+        shell: cmd
 
-      # Upload artifact per OS
+      - name: Build Mac
+        if: runner.os == 'macOS'
+        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts:fonts" --add-data "bin:bin"
+
+      - name: Build Linux
+        if: runner.os == 'Linux'
+        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts:fonts" --add-data "bin:bin"
+
+      # ---------- Upload artifact per OS ----------
       - name: Upload artifact per OS
         uses: actions/upload-artifact@v4
         with:
@@ -95,7 +95,7 @@ jobs:
       - name: Debug new tag
         run: echo "Releasing tag ${{ needs.version.outputs.new_tag }}"
 
-      # Download artifacts dari semua OS
+      # Download artifacts
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
@@ -114,7 +114,7 @@ jobs:
           name: build-ubuntu-latest
           path: artifacts/linux
 
-      # Buat release GitHub
+      # Create GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
