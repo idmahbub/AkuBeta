@@ -9,7 +9,7 @@ jobs:
     build:
         strategy:
             matrix:
-                os: [windows-latest, macos-latest, ubuntu-latest]
+                os: [windows-latest, macos-latest]
 
         runs-on: ${{ matrix.os }}
 
@@ -94,23 +94,21 @@ jobs:
               if: runner.os == 'Windows'
               run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
             
-            - name: Rename macOS build
-              if: runner.os == 'macOS'
+            
+
+            - name: Rename build
               run: |
-                mv dist/PlaylistApp dist/PlaylistApp-macOS
-            - name: Rename Linux build
-              if: runner.os == 'Linux'
-              run: |
-                mv dist/PlaylistApp dist/PlaylistApp-Linux
-            - name: Rename Windows build
-              if: runner.os == 'Windows'
-              run: |
-                ren dist\PlaylistApp.exe PlaylistApp-Windows.exe
+                if [ "$RUNNER_OS" == "macOS" ]; then
+                  mv dist/PlaylistApp dist/PlaylistApp-macOS
+                else
+                  ren dist\PlaylistApp.exe PlaylistApp-Windows.exe
+            
             
             # ================= UPLOAD =================
 
             - name: Upload artifact
               uses: actions/upload-artifact@v4
               with:
-                  name: PlaylistApp-${{ runner.os }}
-                  path: dist/*
+                name: PlaylistApp-${{ runner.os }}
+                path: dist/PlaylistApp-${{ runner.os }}*
+
