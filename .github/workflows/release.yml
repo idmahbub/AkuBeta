@@ -3,6 +3,7 @@ name: Auto Release Build
 on:
   push:
     branches: [main, master]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -25,6 +26,7 @@ jobs:
         run: |
           git fetch --tags
           latest=$(git tag --sort=-v:refname | head -n 1)
+
           if [ -z "$latest" ]; then
             new_tag="v1.0.0"
           else
@@ -36,9 +38,11 @@ jobs:
 
           echo "New tag: $new_tag"
 
+          # Push tag ke repo
           git tag $new_tag
           git push origin $new_tag
 
+          # Set output untuk job lain
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
   # =========================
@@ -46,7 +50,6 @@ jobs:
   # =========================
   build:
     needs: version
-
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
@@ -65,27 +68,19 @@ jobs:
         run: |
           pip install pyinstaller yt-dlp
 
-      # ---------- Windows ----------
-      - name: Build Windows
-        if: runner.os == 'Windows'
-        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
-
-      # ---------- Mac/Linux ----------
-      - name: Build Mac/Linux
-        if: runner.os != 'Windows'
+      # Build untuk masing-masing OS
+      - name: Build app
         run: |
-          pyinstaller app.py \
-            --onefile \
-            --windowed \
-            --name PlaylistApp \
-            --add-data "fonts:fonts" \
-            --add-data "bin:bin"
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
+          else
+            pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts:fonts" --add-data "bin:bin"
+          fi
 
-      # ---------- Upload per OS ----------
+      # Upload artifact per OS
       - name: Upload artifact per OS
         uses: actions/upload-artifact@v4
         with:
-          # Samakan nama artifact untuk release
           name: build-${{ matrix.os }}
           path: dist/*
 
@@ -106,7 +101,6 @@ jobs:
         with:
           name: build-windows-latest
           path: artifacts/windows
-          # merge-multiple: false # default sudah false
 
       - name: Download Mac artifact
         uses: actions/download-artifact@v4
