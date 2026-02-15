@@ -84,20 +84,21 @@ jobs:
             --add-data "bin:bin"
       # ================== Rename build ==================
       - name: Rename build
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           if [ "$RUNNER_OS" == "macOS" ]; then
             mv dist/PlaylistApp dist/PlaylistApp-macOS
           elif [ "$RUNNER_OS" == "Linux" ]; then
             mv dist/PlaylistApp dist/PlaylistApp-Linux
-          else
-            ren dist\PlaylistApp.exe PlaylistApp-Windows.exe
-        shell: bash
-        if: runner.os != 'Windows'
+          fi
+
 
       - name: Rename Windows build
         shell: powershell
         if: runner.os == 'Windows'
         run: ren dist\PlaylistApp.exe PlaylistApp-Windows.exe
+        
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
