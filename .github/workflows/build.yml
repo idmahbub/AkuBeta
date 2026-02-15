@@ -71,26 +71,29 @@ jobs:
 
             # ================= BUILD =================
 
-            - name: Build app
+            - name: Build app (Mac/Linux)
+              if: runner.os != 'Windows'
               run: |
-                  pyinstaller app.py \
-                    --onefile \
-                    --windowed \
-                    --name PlaylistApp \
-                    --add-data "fonts:fonts" \
-                    --add-data "bin:bin"
+                pyinstaller app.py \
+                --onefile \
+                --windowed \
+                --name PlaylistApp \
+                --add-data "fonts:fonts" \
+                --add-data "bin:bin"
+
 
             # ================= WINDOWS FIX =================
 
-            - name: Build app (Windows fix)
+            - name: Build app (Windows)
               if: runner.os == 'Windows'
               run: |
-                  pyinstaller app.py ^
-                    --onefile ^
-                    --windowed ^
-                    --name PlaylistApp ^
-                    --add-data "fonts;fonts" ^
-                    --add-data "bin;bin"
+                pyinstaller app.py ^
+                --onefile ^
+                --windowed ^
+                --name PlaylistApp ^
+                --add-data "fonts;fonts" ^
+                --add-data "bin;bin"
+
 
             # ================= UPLOAD =================
 
