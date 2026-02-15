@@ -94,21 +94,20 @@ jobs:
               if: runner.os == 'Windows'
               run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
             
-            
-
-            - name: Rename build
+            - name: Rename macOS build
+              if: runner.os == 'macOS'
               run: |
-                if [ "$RUNNER_OS" == "macOS" ]; then
-                  mv dist/PlaylistApp dist/PlaylistApp-macOS
-                else
-                  ren dist\PlaylistApp.exe PlaylistApp-Windows.exe
-            
+                mv dist/PlaylistApp dist/PlaylistApp-macOS
+            - name: Rename Windows build
+              if: runner.os == 'Windows'
+              run: |
+                ren dist\PlaylistApp.exe PlaylistApp-Windows.exe
             
             # ================= UPLOAD =================
 
             - name: Upload artifact
               uses: actions/upload-artifact@v4
               with:
-                name: PlaylistApp-${{ runner.os }}
-                path: dist/PlaylistApp-${{ runner.os }}*
+                  name: PlaylistApp-${{ runner.os }}
+                  path: dist/PlaylistApp-${{ runner.os }}*
 
