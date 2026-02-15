@@ -1,0 +1,101 @@
+name: Cross Platform Build
+
+on:
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+jobs:
+    build:
+        strategy:
+            matrix:
+                os: [windows-latest, macos-latest, ubuntu-latest]
+
+        runs-on: ${{ matrix.os }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install -r requirements.txt
+
+            # ================= WINDOWS FFMPEG =================
+
+            - name: Download FFmpeg (Windows)
+              if: runner.os == 'Windows'
+              run: |
+                  mkdir bin
+                  curl -L -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+                  powershell -Command "Expand-Archive ffmpeg.zip -DestinationPath ffmpeg"
+                  copy ffmpeg\*\bin\ffmpeg.exe bin\
+                  copy ffmpeg\*\bin\ffprobe.exe bin\
+
+            # ================= MAC / LINUX FFMPEG =================
+
+            - name: Install FFmpeg (Mac/Linux)
+              if: runner.os != 'Windows'
+              run: |
+                  mkdir -p bin
+                  if [ "$RUNNER_OS" == "macOS" ]; then
+                    brew install ffmpeg
+                    cp $(which ffmpeg) bin/
+                    cp $(which ffprobe) bin/
+                  else
+                    sudo apt update
+                    sudo apt install -y ffmpeg
+                    cp $(which ffmpeg) bin/
+                    cp $(which ffprobe) bin/
+                  fi
+                  chmod +x bin/ffmpeg
+                  chmod +x bin/ffprobe
+            #ytdlp
+            - name: Download yt-dlp (Windows)
+              if: runner.os == 'Windows'
+              run: |
+                curl -L -o bin/yt-dlp.exe https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+            - name: Download yt-dlp (Mac/Linux)
+              if: runner.os != 'Windows'
+              run: |
+                  curl -L -o bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
+                  chmod +x bin/yt-dlp
+              
+
+
+            # ================= BUILD =================
+
+            - name: Build app
+              run: |
+                  pyinstaller main.py \
+                    --onefile \
+                    --windowed \
+                    --name PlaylistApp \
+                    --add-data "fonts:fonts" \
+                    --add-data "bin:bin"
+
+            # ================= WINDOWS FIX =================
+
+            - name: Build app (Windows fix)
+              if: runner.os == 'Windows'
+              run: |
+                  pyinstaller main.py ^
+                    --onefile ^
+                    --windowed ^
+                    --name PlaylistApp ^
+                    --add-data "fonts;fonts" ^
+                    --add-data "bin;bin"
+
+            # ================= UPLOAD =================
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: PlaylistApp-${{ runner.os }}
+                  path: dist/*

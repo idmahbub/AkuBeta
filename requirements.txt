@@ -1,0 +1,4 @@
+pillow
+watchdog
+yt-dlp
+pyinstaller
