@@ -84,15 +84,29 @@ jobs:
                 --name PlaylistApp \
                 --add-data "fonts:fonts" \
                 --add-data "bin:bin"
-
+            
+            
+              
 
             # ================= WINDOWS FIX =================
 
             - name: Build app (Windows)
               if: runner.os == 'Windows'
               run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
-
-
+            
+            - name: Rename macOS build
+              if: runner.os == 'macOS'
+              run: |
+                mv dist/PlaylistApp dist/PlaylistApp-macOS
+            - name: Rename Linux build
+              if: runner.os == 'Linux'
+              run: |
+                mv dist/PlaylistApp dist/PlaylistApp-Linux
+            - name: Rename Windows build
+              if: runner.os == 'Windows'
+              run: |
+                ren dist\PlaylistApp.exe PlaylistApp-Windows.exe
+            
             # ================= UPLOAD =================
 
             - name: Upload artifact

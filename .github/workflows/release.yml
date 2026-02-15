@@ -107,4 +107,7 @@ jobs:
         with:
           tag_name: ${{ needs.version.outputs.new_tag }}
           name: Release ${{ needs.version.outputs.new_tag }}
-          files: artifacts/**/*
+          files: |
+            artifacts/**/*Windows*
+            artifacts/**/*macOS*
+            artifacts/**/*Linux*
