@@ -3,7 +3,6 @@ name: Auto Release Build
 on:
   push:
     branches: [main, master]
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,11 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get latest tag and create new tag
+      - name: Get latest tag
         id: tag
         run: |
           git fetch --tags
-
           latest=$(git tag --sort=-v:refname | head -n 1)
           if [ -z "$latest" ]; then
             new_tag="v1.0.0"
@@ -48,9 +46,11 @@ jobs:
   # =========================
   build:
     needs: version
+
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
+
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -63,36 +63,31 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pyinstaller yt-dlp pillow
+          pip install pyinstaller yt-dlp
 
-      # ---------- Build per OS ----------
-      - name: Build App
+      # ---------- Windows ----------
+      - name: Build Windows
+        if: runner.os == 'Windows'
+        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
+
+      # ---------- Mac/Linux ----------
+      - name: Build Mac/Linux
+        if: runner.os != 'Windows'
         run: |
-          echo "Building for $RUNNER_OS"
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
-          else
-            pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts:fonts" --add-data "bin:bin"
-          fi
+          pyinstaller app.py \
+            --onefile \
+            --windowed \
+            --name PlaylistApp \
+            --add-data "fonts:fonts" \
+            --add-data "bin:bin"
 
-      # ---------- Rename binary per OS ----------
-      - name: Rename binary
-        run: |
-          mkdir -p dist_renamed
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            mv dist/PlaylistApp.exe dist_renamed/PlaylistApp-Windows.exe
-          elif [ "$RUNNER_OS" = "macOS" ]; then
-            mv dist/PlaylistApp dist_renamed/PlaylistApp-macOS
-          else
-            mv dist/PlaylistApp dist_renamed/PlaylistApp-Linux
-          fi
-
-      # ---------- Upload artifact per OS ----------
-      - name: Upload artifact
+      # ---------- Upload per OS ----------
+      - name: Upload artifact per OS
         uses: actions/upload-artifact@v4
         with:
+          # Samakan nama artifact untuk release
           name: build-${{ matrix.os }}
-          path: dist_renamed/*
+          path: dist/*
 
   # =========================
   # CREATE RELEASE
@@ -102,11 +97,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Debug new tag
+        run: echo "Releasing tag ${{ needs.version.outputs.new_tag }}"
+
+      # Download artifacts dari semua OS
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: build-windows-latest
           path: artifacts/windows
+          # merge-multiple: false # default sudah false
 
       - name: Download Mac artifact
         uses: actions/download-artifact@v4
@@ -120,9 +120,7 @@ jobs:
           name: build-ubuntu-latest
           path: artifacts/linux
 
-      - name: Debug new tag
-        run: echo "Releasing tag ${{ needs.version.outputs.new_tag }}"
-
+      # Buat release GitHub
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
