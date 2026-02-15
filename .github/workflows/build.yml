@@ -73,7 +73,7 @@ jobs:
 
             - name: Build app
               run: |
-                  pyinstaller main.py \
+                  pyinstaller app.py \
                     --onefile \
                     --windowed \
                     --name PlaylistApp \
@@ -85,7 +85,7 @@ jobs:
             - name: Build app (Windows fix)
               if: runner.os == 'Windows'
               run: |
-                  pyinstaller main.py ^
+                  pyinstaller app.py ^
                     --onefile ^
                     --windowed ^
                     --name PlaylistApp ^
