@@ -86,13 +86,7 @@ jobs:
 
             - name: Build app (Windows)
               if: runner.os == 'Windows'
-              run: |
-                pyinstaller app.py ^
-                --onefile ^
-                --windowed ^
-                --name PlaylistApp ^
-                --add-data "fonts;fonts" ^
-                --add-data "bin;bin"
+              run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
 
 
             # ================= UPLOAD =================
