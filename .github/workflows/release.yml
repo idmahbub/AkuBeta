@@ -71,7 +71,6 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install ffmpeg -y
-          mkdir bin
           copy C:\ProgramData\chocolatey\bin\ffmpeg.exe bin\
           copy C:\ProgramData\chocolatey\bin\ffprobe.exe bin\
 
