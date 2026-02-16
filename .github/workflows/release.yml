@@ -24,7 +24,6 @@ jobs:
         id: tag
         run: |
           git fetch --tags
-
           latest=$(git tag --sort=-v:refname | head -n 1)
 
           if [ -z "$latest" ]; then
@@ -35,8 +34,6 @@ jobs:
             patch=$((patch+1))
             new_tag="v$major.$minor.$patch"
           fi
-
-          echo "New tag: $new_tag"
 
           git tag $new_tag
           git push origin $new_tag
@@ -70,47 +67,69 @@ jobs:
           pip install pyinstaller
 
       # ---------- Windows ----------
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install ffmpeg -y
+          mkdir bin
+          copy C:\ProgramData\chocolatey\bin\ffmpeg.exe bin\
+          copy C:\ProgramData\chocolatey\bin\ffprobe.exe bin\
+
       - name: Build Windows
         if: runner.os == 'Windows'
-        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
+        run: |
+          pyinstaller app.py --name PlaylistApp --windowed --add-data "bin;bin" --add-data "fonts;fonts" --hidden-import=DownloadManager --hidden-import=arabic_reshaper --hidden-import=bidi.algorithm --noconfirm
 
-      # ---------- Mac/Linux ----------
-      - name: Build Mac/Linux
-        if: runner.os != 'Windows'
+      - name: Rename Windows build folder
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Rename-Item dist\PlaylistApp PlaylistApp-Windows
+
+      - name: Zip Windows build
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Compress-Archive -Path PlaylistApp-Windows -DestinationPath PlaylistApp-Windows.zip
+
+      # ---------- macOS ----------
+      - name: Install FFmpeg (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg
+          mkdir -p bin
+          cp $(which ffmpeg) bin/
+          cp $(which ffprobe) bin/
+
+      - name: Build Mac
+        if: runner.os == 'macOS'
         run: |
           pyinstaller app.py \
             --name PlaylistApp \
             --windowed \
-            --onefile \
             --hidden-import=DownloadManager \
             --hidden-import=arabic_reshaper \
             --hidden-import=bidi.algorithm \
             --add-data "fonts:fonts" \
             --add-data "bin:bin" \
             --noconfirm
-      # ================== Rename build ==================
-      - name: Rename build
-        if: runner.os != 'Windows'
-        shell: bash
+
+      - name: Rename Mac build
+        if: runner.os == 'macOS'
         run: |
-          if [ "$RUNNER_OS" == "macOS" ]; then
-            mv dist/PlaylistApp dist/PlaylistApp-macOS
-          elif [ "$RUNNER_OS" == "Linux" ]; then
-            mv dist/PlaylistApp dist/PlaylistApp-Linux
-          fi
+          mv dist/PlaylistApp.app PlaylistApp-macOS.app
 
+      - name: Zip Mac build
+        if: runner.os == 'macOS'
+        run: |
+          zip -r PlaylistApp-macOS.zip PlaylistApp-macOS.app
 
-      - name: Rename Windows build
-        shell: powershell
-        if: runner.os == 'Windows'
-        run: ren dist\PlaylistApp.exe PlaylistApp-Windows.exe
-        
-
-      - name: Upload artifact
+      # ================= Upload ZIP Artifact =================
+      - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ runner.os }}
-          path: dist/*
+          path: "*.zip"
 
   # =========================
   # CREATE RELEASE
@@ -130,4 +149,4 @@ jobs:
         with:
           tag_name: ${{ needs.version.outputs.new_tag }}
           name: Release ${{ needs.version.outputs.new_tag }}
-          files: artifacts/**/*
+          files: artifacts/**/*.zip
