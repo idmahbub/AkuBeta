@@ -33,10 +33,9 @@ jobs:
             patch=$((patch+1))
             new_tag="v$major.$minor.$patch"
           fi
-          echo "New tag: $new_tag"
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
           git tag $new_tag
           git push origin $new_tag
-          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
   # =========================
   # BUILD CROSS PLATFORM
@@ -56,7 +55,6 @@ jobs:
       - name: Install dependencies
         run: pip install pyinstaller yt-dlp
 
-      # Build per OS
       - name: Build Windows
         if: runner.os == 'Windows'
         run: pyinstaller app.py --onefile --windowed --name PlaylistApp-windows --add-data "fonts;fonts" --add-data "bin;bin"
@@ -70,7 +68,6 @@ jobs:
         if: runner.os == 'Linux'
         run: pyinstaller app.py --onefile --windowed --name PlaylistApp-linux --add-data "fonts:fonts" --add-data "bin:bin"
 
-      # Upload artifact per OS
       - name: Upload artifact per OS
         uses: actions/upload-artifact@v4
         with:
@@ -84,29 +81,37 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo to get tag
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # penting agar tag tersedia di runner release
+          fetch-depth: 0   # penting agar tag tersedia
 
-      - name: Prepare artifact folder
-        run: |
-          mkdir -p artifacts/windows artifacts/macos artifacts/linux
-          # Download semua artifacts per OS
-          actions/download-artifact@v4 --name build-windows-latest --path artifacts/windows || echo "skip"
-          actions/download-artifact@v4 --name build-macos-latest --path artifacts/macos || echo "skip"
-          actions/download-artifact@v4 --name build-ubuntu-latest --path artifacts/linux || echo "skip"
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-windows-latest
+          path: artifacts/windows
 
-      # Create release and upload assets
+      - name: Download Mac artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos-latest
+          path: artifacts/macos
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-ubuntu-latest
+          path: artifacts/linux
+
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ needs.version.outputs.new_tag }}
           name: Release ${{ needs.version.outputs.new_tag }}
-          draft: false
-          prerelease: false
-          assets: |
+          artifacts: |
             artifacts/windows/PlaylistApp-windows.exe
             artifacts/macos/PlaylistApp-macos
             artifacts/linux/PlaylistApp-linux
+          draft: false
+          prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
