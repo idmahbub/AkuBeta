@@ -6,3 +6,4 @@ output/
 *.spec
 *.DS_Store
 prompt.txt
+bin/*

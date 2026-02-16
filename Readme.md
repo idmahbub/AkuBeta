@@ -21,3 +21,18 @@ folder/
 
     ### downloadmanager.py
     This file is responsible for managing the download processes. It interfaces with external tools like `yt-dlp` to download videos and audio from various sources, ensuring efficient and reliable downloads.
+
+# mac build
+``
+    pyinstaller app.py \
+    --name PlaylistApp \
+    --windowed \
+    --onefile \
+    --hidden-import=DownloadManager \
+    --hidden-import=arabic_reshaper \
+    --hidden-import=bidi.algorithm \
+    --add-data "fonts:fonts" \
+    --add-data "bin:bin" \
+    --noconfirm
+
+``

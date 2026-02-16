@@ -79,11 +79,15 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           pyinstaller app.py \
-            --onefile \
-            --windowed \
             --name PlaylistApp \
+            --windowed \
+            --onefile \
+            --hidden-import=DownloadManager \
+            --hidden-import=arabic_reshaper \
+            --hidden-import=bidi.algorithm \
             --add-data "fonts:fonts" \
-            --add-data "bin:bin"
+            --add-data "bin:bin" \
+            --noconfirm
       # ================== Rename build ==================
       - name: Rename build
         if: runner.os != 'Windows'

@@ -8,6 +8,7 @@ import shlex
 import re
 import platform
 import sys
+import shutil
 import textwrap
 import random
 import arabic_reshaper
@@ -37,21 +38,19 @@ def wrap_text_by_chars(text, max_chars=28):
     return "\n".join(lines)
 
 def find_binary(name):
-    """
-    Cari ffmpeg/ffprobe secara cross platform
-    Priority:
-    1. Bundled binary (bin/)
-    2. System PATH
-    """
-
     exe = name + ".exe" if os.name == "nt" else name
 
     bundled = resource_path(os.path.join("bin", exe))
 
-    if os.path.exists(bundled):
+    if os.path.isfile(bundled) and os.access(bundled, os.X_OK):
         return bundled
 
-    return exe
+    system = shutil.which(name)
+    if system:
+        return system
+
+    raise FileNotFoundError(f"{name} not found")
+
 
 
 FFMPEG = find_binary("ffmpeg")
@@ -578,7 +577,7 @@ class PlaylistApp:
         height = 220
 
         cmd = [
-            "ffmpeg",
+            FFMPEG,
             "-i", video_path,
             "-f", "image2pipe",
             "-pix_fmt", "rgb24",
