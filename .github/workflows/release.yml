@@ -16,14 +16,15 @@ jobs:
   version:
     runs-on: ubuntu-latest
     outputs:
-      new_tag: ${{ steps.tag.outputs.new_tag }}
+      new_tag: ${{ steps.create_tag.outputs.new_tag }}
     steps:
       - uses: actions/checkout@v4
-      - name: Get latest tag
-        id: tag
+      - name: Fetch tags
+        run: git fetch --tags
+      - name: Determine new tag
+        id: create_tag
         run: |
-          git fetch --tags
-          latest=$(git tag --sort=-v:refname | head -n 1)
+          latest=$(git tag --sort=-v:refname | head -n1)
           if [ -z "$latest" ]; then
             new_tag="v1.0.0"
           else
@@ -53,10 +54,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: |
-          pip install pyinstaller yt-dlp
+        run: pip install pyinstaller yt-dlp
 
-      # ---------- Build per OS ----------
+      # Build per OS
       - name: Build Windows
         if: runner.os == 'Windows'
         run: pyinstaller app.py --onefile --windowed --name PlaylistApp-windows --add-data "fonts;fonts" --add-data "bin;bin"
@@ -70,7 +70,7 @@ jobs:
         if: runner.os == 'Linux'
         run: pyinstaller app.py --onefile --windowed --name PlaylistApp-linux --add-data "fonts:fonts" --add-data "bin:bin"
 
-      # ---------- Upload artifact per OS ----------
+      # Upload artifact per OS
       - name: Upload artifact per OS
         uses: actions/upload-artifact@v4
         with:
@@ -84,37 +84,29 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Debug new tag
-        run: echo "Releasing tag ${{ needs.version.outputs.new_tag }}"
-
-      # Download artifacts per OS
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
+      - name: Checkout repo to get tag
+        uses: actions/checkout@v4
         with:
-          name: build-windows-latest
-          path: artifacts/windows
+          fetch-depth: 0   # penting agar tag tersedia di runner release
 
-      - name: Download Mac artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-macos-latest
-          path: artifacts/macos
+      - name: Prepare artifact folder
+        run: |
+          mkdir -p artifacts/windows artifacts/macos artifacts/linux
+          # Download semua artifacts per OS
+          actions/download-artifact@v4 --name build-windows-latest --path artifacts/windows || echo "skip"
+          actions/download-artifact@v4 --name build-macos-latest --path artifacts/macos || echo "skip"
+          actions/download-artifact@v4 --name build-ubuntu-latest --path artifacts/linux || echo "skip"
 
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-ubuntu-latest
-          path: artifacts/linux
-
-      # Create GitHub Release
+      # Create release and upload assets
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ needs.version.outputs.new_tag }}
+          tag: ${{ needs.version.outputs.new_tag }}
           name: Release ${{ needs.version.outputs.new_tag }}
-          files: |
+          draft: false
+          prerelease: false
+          assets: |
             artifacts/windows/PlaylistApp-windows.exe
             artifacts/macos/PlaylistApp-macos
             artifacts/linux/PlaylistApp-linux
-          overwrite_files: true
           token: ${{ secrets.GITHUB_TOKEN }}
