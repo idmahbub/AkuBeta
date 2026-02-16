@@ -36,6 +36,8 @@ def wrap_text_by_chars(text, max_chars=28):
     for line in text.split("\n"):
         lines.extend(textwrap.wrap(line, max_chars))
     return "\n".join(lines)
+def ffmpeg_path(p):
+    return p.replace("\\", "/").replace(":", "\\:")
 
 def find_binary(name):
     exe = name + ".exe" if os.name == "nt" else name
@@ -750,7 +752,7 @@ class PlaylistApp:
             messagebox.showerror("Error", "Missing background/overlay")
             return
         encoder = self.detect_gpu_encoder()
-        font_path = self.get_random_font().replace("\\", "/")
+        font_path = ffmpeg_path(self.get_random_font())
         # ================= CREATE PLAYLIST TEXT =================
         playlist_text = []
         for i, fpath in enumerate(self.playlist_files, start=1):
@@ -762,6 +764,7 @@ class PlaylistApp:
         playlist_text_str = fix_mixed_text(playlist_text_str)
         # buat file sementara supaya multiline aman
         text_file = os.path.join(self.output_folder, f"{self.bg_name}_playlist.txt")
+        text_file = ffmpeg_path(text_file)
         with open(text_file, "w", encoding="utf-8") as f:
             f.write(playlist_text_str)
         # ================= CALCULATE BOX SIZE =================
@@ -805,18 +808,18 @@ class PlaylistApp:
             
         filter_complex = (
             f"[0:v]scale={screen_width}:{screen_height}[bg];"
-            f"color=color=#{box_color}:size={box_width}x{screen_height},format=rgba,"
+            f"color=color=0x{box_color}:size={box_width}x{screen_height},format=rgba,"
             f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{alpha_expr}'[grad];"
             f"[bg][grad]overlay=x={x_box}:y=0[bg_box];"
             f"[bg_box]drawtext="
             f"fontfile='{font_path}':"
             f"textfile='{text_file}':"
-            f"fontcolor=#{text_color}:"
+            f"fontcolor=0x{text_color}:"
             f"fontsize={fontsize}:"
             f"line_spacing={line_spacing}:"
             f"x={x_drawtext}:"
             f"y={y_drawtext}:"
-            f"shadowcolor=#{shadow_color}:"
+            f"shadowcolor=0x{shadow_color}:"
             f"shadowx=3:"
             f"shadowy=3[bg_text];"
             f"[1:v]scale={screen_width}:{screen_height},format=yuva420p,"
