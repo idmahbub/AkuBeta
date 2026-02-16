@@ -49,7 +49,6 @@ jobs:
   # =========================
   build:
     needs: version
-
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
@@ -81,22 +80,19 @@ jobs:
           copy C:\ProgramData\chocolatey\bin\ffmpeg.exe bin\
           copy C:\ProgramData\chocolatey\bin\ffprobe.exe bin\
 
-      - name: Build Windows
+      - name: Build Windows (One File EXE)
         if: runner.os == 'Windows'
-        run: pyinstaller app.py --name PlaylistApp --windowed --hidden-import=DownloadManager --hidden-import=arabic_reshaper --hidden-import=bidi.algorithm --add-data "bin;bin" --add-data "fonts;fonts" --noconfirm
+        run: pyinstaller app.py --name PlaylistApp --windowed --onefile --hidden-import=DownloadManager --hidden-import=arabic_reshaper --hidden-import=bidi.algorithm --add-data "bin;bin" --add-data "fonts;fonts" --noconfirm
 
       - name: Package Windows
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          $distPath = "dist\PlaylistApp"
-      
-          if (!(Test-Path $distPath)) {
-              Write-Error "dist\PlaylistApp not found!"
+          if (!(Test-Path "dist\PlaylistApp.exe")) {
+              Write-Error "dist\PlaylistApp.exe not found!"
               exit 1
           }
-      
-          Compress-Archive -Path $distPath -DestinationPath "PlaylistApp-Windows.zip"
+          Compress-Archive -Path "dist\PlaylistApp.exe" -DestinationPath "PlaylistApp-Windows.zip"
 
 
       # ================= MAC =================
@@ -108,7 +104,7 @@ jobs:
           cp $(which ffmpeg) bin/
           cp $(which ffprobe) bin/
 
-      - name: Build Mac
+      - name: Build Mac (.app Bundle)
         if: runner.os == 'macOS'
         run: |
           pyinstaller app.py \
@@ -124,11 +120,15 @@ jobs:
       - name: Package Mac
         if: runner.os == 'macOS'
         run: |
+          if [ ! -d "dist/PlaylistApp.app" ]; then
+            echo "PlaylistApp.app not found!"
+            exit 1
+          fi
           mv dist/PlaylistApp.app PlaylistApp-macOS.app
           zip -r PlaylistApp-macOS.zip PlaylistApp-macOS.app
 
 
-      # ================= Upload Artifact =================
+      # ================= UPLOAD ARTIFACT =================
       - name: Upload ZIP Artifact
         uses: actions/upload-artifact@v4
         with:
