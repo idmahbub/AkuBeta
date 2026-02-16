@@ -90,13 +90,16 @@ jobs:
         shell: powershell
         run: |
           $distPath = "dist\PlaylistApp"
+      
           if (!(Test-Path $distPath)) {
               Write-Error "dist\PlaylistApp not found!"
               exit 1
           }
-
-          Rename-Item $distPath "PlaylistApp-Windows"
-          Compress-Archive -Path "PlaylistApp-Windows" -DestinationPath "PlaylistApp-Windows.zip"
+      
+          $newPath = "dist\PlaylistApp-Windows"
+          Rename-Item $distPath $newPath
+      
+          Compress-Archive -Path $newPath -DestinationPath "PlaylistApp-Windows.zip"
 
 
       # ================= MAC =================
