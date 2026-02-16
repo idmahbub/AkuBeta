@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get latest tag
+      - name: Create Increment Version Tag
         id: tag
         run: |
           git fetch --tags
@@ -35,10 +35,14 @@ jobs:
             new_tag="v$major.$minor.$patch"
           fi
 
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
           git tag $new_tag
           git push origin $new_tag
 
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
 
   # =========================
   # BUILD CROSS PLATFORM
@@ -60,39 +64,49 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # ---------- Windows ----------
+      # ================= WINDOWS =================
       - name: Install FFmpeg (Windows)
         if: runner.os == 'Windows'
         run: |
           choco install ffmpeg -y
+          mkdir bin
           copy C:\ProgramData\chocolatey\bin\ffmpeg.exe bin\
           copy C:\ProgramData\chocolatey\bin\ffprobe.exe bin\
 
       - name: Build Windows
         if: runner.os == 'Windows'
         run: |
-          pyinstaller app.py --name PlaylistApp --windowed --hidden-import=DownloadManager --hidden-import=arabic_reshaper --hidden-import=bidi.algorithm --add-data "bin;bin" --add-data "fonts;fonts" --noconfirm
-        
-      - name: Prepare Windows ZIP
+          pyinstaller app.py ^
+            --name PlaylistApp ^
+            --windowed ^
+            --hidden-import=DownloadManager ^
+            --hidden-import=arabic_reshaper ^
+            --hidden-import=bidi.algorithm ^
+            --add-data "bin;bin" ^
+            --add-data "fonts;fonts" ^
+            --noconfirm
+
+      - name: Package Windows
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          $buildPath = "dist\PlaylistApp"
-          if (!(Test-Path $buildPath)) {
-              Write-Error "Build folder not found!"
+          $distPath = "dist\PlaylistApp"
+          if (!(Test-Path $distPath)) {
+              Write-Error "dist\PlaylistApp not found!"
               exit 1
           }
-      
-          Rename-Item $buildPath "PlaylistApp-Windows"
+
+          Rename-Item $distPath "PlaylistApp-Windows"
           Compress-Archive -Path "PlaylistApp-Windows" -DestinationPath "PlaylistApp-Windows.zip"
 
-      # ---------- macOS ----------
+
+      # ================= MAC =================
       - name: Install FFmpeg (Mac)
         if: runner.os == 'macOS'
         run: |
@@ -114,22 +128,21 @@ jobs:
             --add-data "bin:bin" \
             --noconfirm
 
-      - name: Rename Mac build
+      - name: Package Mac
         if: runner.os == 'macOS'
         run: |
           mv dist/PlaylistApp.app PlaylistApp-macOS.app
-
-      - name: Zip Mac build
-        if: runner.os == 'macOS'
-        run: |
           zip -r PlaylistApp-macOS.zip PlaylistApp-macOS.app
 
-      # ================= Upload ZIP Artifact =================
-      - name: Upload ZIP artifact
+
+      # ================= Upload Artifact =================
+      - name: Upload ZIP Artifact
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ runner.os }}
           path: "*.zip"
+
+
 
   # =========================
   # CREATE RELEASE
