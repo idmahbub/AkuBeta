@@ -3,7 +3,6 @@ name: Auto Release Build
 on:
   push:
     branches: [main, master]
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,15 +15,18 @@ jobs:
   version:
     runs-on: ubuntu-latest
     outputs:
-      new_tag: ${{ steps.create_tag.outputs.new_tag }}
+      new_tag: ${{ steps.tag.outputs.new_tag }}
+
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch all tags
-        run: git fetch --tags
-      - name: Determine new tag
-        id: create_tag
+
+      - name: Get latest tag
+        id: tag
         run: |
-          latest=$(git tag --sort=-v:refname | head -n1)
+          git fetch --tags
+
+          latest=$(git tag --sort=-v:refname | head -n 1)
+
           if [ -z "$latest" ]; then
             new_tag="v1.0.0"
           else
@@ -33,83 +35,79 @@ jobs:
             patch=$((patch+1))
             new_tag="v$major.$minor.$patch"
           fi
-          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+          echo "New tag: $new_tag"
+
           git tag $new_tag
           git push origin $new_tag
+
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
   # =========================
   # BUILD CROSS PLATFORM
   # =========================
   build:
     needs: version
+
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
+
     runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install dependencies
-        run: pip install pyinstaller yt-dlp
 
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller yt-dlp
+
+      # ---------- Windows ----------
       - name: Build Windows
         if: runner.os == 'Windows'
-        run: pyinstaller app.py --onefile --windowed --name PlaylistApp-windows --add-data "fonts;fonts" --add-data "bin;bin"
-        shell: cmd
+        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
 
-      - name: Build Mac
-        if: runner.os == 'macOS'
-        run: pyinstaller app.py --onefile --windowed --name PlaylistApp-macos --add-data "fonts:fonts" --add-data "bin:bin"
+      # ---------- Mac/Linux ----------
+      - name: Build Mac/Linux
+        if: runner.os != 'Windows'
+        run: |
+          pyinstaller app.py \
+            --onefile \
+            --windowed \
+            --name PlaylistApp \
+            --add-data "fonts:fonts" \
+            --add-data "bin:bin"
 
-      - name: Build Linux
-        if: runner.os == 'Linux'
-        run: pyinstaller app.py --onefile --windowed --name PlaylistApp-linux --add-data "fonts:fonts" --add-data "bin:bin"
-
-      - name: Upload artifact per OS
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.os }}
+          name: build-${{ runner.os }}
           path: dist/*
 
   # =========================
   # CREATE RELEASE
   # =========================
   release:
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-latest
+
     steps:
-      # Checkout repo FULL agar tag tersedia
-      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
-          fetch-depth: 0   # <--- penting: ambil semua tag
+          path: artifacts
 
-      # Download artifacts dari semua OS
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-windows-latest
-          path: artifacts/windows
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-macos-latest
-          path: artifacts/macos
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-ubuntu-latest
-          path: artifacts/linux
-
-      # Buat release dengan tag yang sudah ada
       - name: Create GitHub Release
-        uses: ncipollo/release-action@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag: ${{ needs.version.outputs.new_tag }}   # <--- ini wajib!
+          tag_name: ${{ needs.version.outputs.new_tag }}
           name: Release ${{ needs.version.outputs.new_tag }}
-          artifacts: |
-            artifacts/windows/PlaylistApp-windows.exe
-            artifacts/macos/PlaylistApp-macos
-            artifacts/linux/PlaylistApp-linux
-          draft: false
-          prerelease: false
-          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            artifacts/**/*Windows*
+            artifacts/**/*macOS*
+            artifacts/**/*Linux*
