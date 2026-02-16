@@ -77,15 +77,7 @@ jobs:
           - name: Build Windows
           if: runner.os == 'Windows'
           run: |
-            pyinstaller app.py `
-              --name PlaylistApp `
-              --windowed `
-              --hidden-import=DownloadManager `
-              --hidden-import=arabic_reshaper `
-              --hidden-import=bidi.algorithm `
-              --add-data "bin;bin" `
-              --add-data "fonts;fonts" `
-              --noconfirm
+            pyinstaller app.py --name PlaylistApp --windowed --hidden-import=DownloadManager --hidden-import=arabic_reshaper --hidden-import=bidi.algorithm --add-data "bin;bin" --add-data "fonts;fonts" --noconfirm
         
       - name: Prepare Windows ZIP
         if: runner.os == 'Windows'
