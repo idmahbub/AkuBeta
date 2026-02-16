@@ -118,8 +118,6 @@ class PlaylistApp:
         self.process = None
         self.setup_dark_theme()
         self.build_ui()
-    def log(self, message):
-        self.root.after(0, self._append_log, message)
     def setup_dark_theme(self):
         style = ttk.Style()
 
@@ -242,8 +240,8 @@ class PlaylistApp:
         with open(sub_file, "w", encoding="utf-8") as f:
             f.write(sub_wrapped)
 
-        font_big = self.get_random_font().replace("\\", "/")
-        font_small = self.get_random_font().replace("\\", "/")
+        font_big = ffmpeg_path(self.get_random_font())
+        font_small = ffmpeg_path(self.get_random_font())
 
         # ==== thumbnail box params ====
         W, H = 1280, 720
@@ -290,7 +288,7 @@ class PlaylistApp:
             fontfile='{font_small}':
             textfile='{sub_file}':
             fontsize=40:
-            fontcolor=#e0e0e0:
+            fontcolor=0xe0e0e0:
             text_align={text_align}:
             line_spacing=10:
             x={x_text}:
@@ -299,6 +297,7 @@ class PlaylistApp:
             shadowx=3:
             shadowy=3
         """
+        filter_complex = "\n".join(line.strip() for line in filter_complex.splitlines() if line.strip())
 
         subprocess.run([
             FFMPEG, "-y", "-i", bg,
@@ -585,7 +584,6 @@ class PlaylistApp:
             "-pix_fmt", "rgb24",
             "-vcodec", "rawvideo",
             "-vf", f"fps=24,scale={width}:{height}",
-            "-vf", f"scale={width}:{height}",
             "-"
         ]
 
@@ -763,10 +761,12 @@ class PlaylistApp:
         playlist_text_str = "\n".join(playlist_text)
         playlist_text_str = fix_mixed_text(playlist_text_str)
         # buat file sementara supaya multiline aman
-        text_file = os.path.join(self.output_folder, f"{self.bg_name}_playlist.txt")
-        text_file = ffmpeg_path(text_file)
-        with open(text_file, "w", encoding="utf-8") as f:
+        text_file_os = os.path.join(self.output_folder, f"{self.bg_name}_playlist.txt")
+        with open(text_file_os, "w", encoding="utf-8") as f:
             f.write(playlist_text_str)
+
+        text_file = ffmpeg_path(text_file_os)
+
         # ================= CALCULATE BOX SIZE =================
         fontsize = 42
         line_spacing = 12
@@ -955,6 +955,8 @@ class PlaylistApp:
                     )
 
             self.process.wait()
+            if self.process.returncode != 0:
+                raise RuntimeError("FFmpeg failed")
 
         except Exception as e:
             self.log(f"FFmpeg error: {e}")
