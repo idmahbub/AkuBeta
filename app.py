@@ -10,6 +10,8 @@ import platform
 import sys
 import textwrap
 import random
+import arabic_reshaper
+from bidi.algorithm import get_display
 # ================= CROSS PLATFORM FFMPEG =================
 
 def resource_path(relative_path):
@@ -22,7 +24,11 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
-
+#latin and arab shaping
+def fix_mixed_text(text):
+    reshaped = arabic_reshaper.reshape(text)
+    bidi_text = get_display(reshaped)
+    return bidi_text
 def wrap_text_by_chars(text, max_chars=28):
     lines = []
     for line in text.split("\n"):
@@ -301,7 +307,7 @@ class PlaylistApp:
 
         self.log(f"Thumbnail OK → {output_path}")
 
-    def validate_and_generate(self):
+    def validate_and_generate(self,type="visual"):
         if not self.playlist_files:
             messagebox.showwarning(
                 "Playlist Kosong",
@@ -324,8 +330,10 @@ class PlaylistApp:
                 "Pilih overlay video terlebih dahulu."
             )
             return
-
-        self.run_thread(self.generate_visual)
+        if type == "visual":
+            self.run_thread(self.generate_visual)
+        if type == "final":
+            self.run_thread(self.generate_final)
     def update_visual_button_state(self):
         if self.playlist_files:
             self.btn_visual.config(state="normal")
@@ -447,7 +455,7 @@ class PlaylistApp:
 
         ttk.Button(
             playlist_row,
-            text="Select Playlist Folder",
+            text="Select Mp3 Folder",
             command=self.select_playlist_folder
         ).grid(row=0, column=0, sticky="ew")
 
@@ -496,7 +504,7 @@ class PlaylistApp:
         self.btn_visual = ttk.Button(
             controls,
             text="Generate Visual",
-            command=self.validate_and_generate,
+            command=lambda: self.validate_and_generate("visual"),
             state="disabled"  # default disable dulu
         )
         self.btn_visual.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
@@ -504,7 +512,7 @@ class PlaylistApp:
         self.btn_final = ttk.Button(
             controls,
             text="Generate Final",
-            command=self.validate_and_generate,
+            command=lambda: self.validate_and_generate("final"),
             state="disabled"  # default disable dulu
         )
         self.btn_final.grid(row=1, column=2, columnspan=2, sticky="ew", pady=5, padx=(5,0))
@@ -679,8 +687,11 @@ class PlaylistApp:
         playlist_text = []
         for i, fpath in enumerate(self.playlist_files, start=1):
             name = os.path.basename(fpath).replace(".mp3", "").replace("_", " ")
-            playlist_text.append(f"{i:02d}. {name}")
+            mixed_text = f"{i:02d}. {name}"
+            fixed_text = fix_mixed_text(mixed_text)
+            playlist_text.append(fixed_text)
         playlist_text_str = "\n".join(playlist_text)
+        playlist_text_str = fix_mixed_text(playlist_text_str)
         # buat file sementara supaya multiline aman
         text_file = os.path.join(self.output_folder, f"{self.bg_name}_playlist.txt")
         with open(text_file, "w", encoding="utf-8") as f:

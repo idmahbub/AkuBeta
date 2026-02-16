@@ -2,3 +2,5 @@ pillow
 watchdog
 yt-dlp
 pyinstaller
+arabic-reshaper
+python-bidi

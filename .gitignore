@@ -5,3 +5,4 @@ __pycache__/
 output/
 *.spec
 *.DS_Store
+prompt.txt

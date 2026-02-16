@@ -244,7 +244,7 @@ class DownloadManager:
             batch = files[i:i + batch_size]
             batch_index = (i // batch_size) + 1
 
-            batch_folder = os.path.join(folder, f"mp3_{batch_index}")
+            batch_folder = os.path.join(folder, f"media_{batch_index}")
             os.makedirs(batch_folder, exist_ok=True)
 
             for fname in batch:
