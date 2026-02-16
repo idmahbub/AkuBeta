@@ -96,10 +96,7 @@ jobs:
               exit 1
           }
       
-          $newPath = "dist\PlaylistApp-Windows"
-          Rename-Item $distPath $newPath
-      
-          Compress-Archive -Path $newPath -DestinationPath "PlaylistApp-Windows.zip"
+          Compress-Archive -Path $distPath -DestinationPath "PlaylistApp-Windows.zip"
 
 
       # ================= MAC =================
