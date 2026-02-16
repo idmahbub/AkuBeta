@@ -814,6 +814,7 @@ class PlaylistApp:
             f"[bg_box]drawtext="
             f"fontfile='{font_path}':"
             f"textfile='{text_file}':"
+            f"text_align={text_align}:"
             f"fontcolor=0x{text_color}:"
             f"fontsize={fontsize}:"
             f"line_spacing={line_spacing}:"

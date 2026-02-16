@@ -4,3 +4,4 @@ yt-dlp
 pyinstaller
 arabic-reshaper
 python-bidi
+
