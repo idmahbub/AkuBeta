@@ -506,6 +506,7 @@ class PlaylistApp:
                 f"{max_alpha},"
                 f"{max_alpha}*(X/{fade_width}))"
             )
+            
         filter_complex = f"""
             [0:v]scale={screen_width}:{screen_height}[bg];
             color=black:size={box_width}x{screen_height},format=rgba,geq=r=0:g=0:b=0:a='{alpha_expr}'[grad];
@@ -559,10 +560,12 @@ class PlaylistApp:
         print("\n=== YOUTUBE DESCRIPTION ===\n")
         print(desc)
         list_path = os.path.join(self.output_folder, f"{self.bg_name}_playlist.txt")
-        with open(list_path, "w", encoding="utf-8") as f:
+        with open(list_path, "w", encoding="utf-8", newline="\n") as f:
             for file in self.playlist_files:
                 abs_path = os.path.abspath(file).replace("\\", "/")
-                f.write(f"file '{abs_path}'\n")
+                safe_path = abs_path.replace("'", "'\\''")
+                f.write(f"file '{safe_path}'\n")
+
         # ================= COMBINE MP3 =================
         combined_path = os.path.join(self.output_folder, f"{self.bg_name}_combined.mp3")
         combine_cmd = [
@@ -596,7 +599,7 @@ class PlaylistApp:
             output_path
         ]
         self.run_ffmpeg(" ".join(shlex.quote(x) for x in cmd), total_duration=audio_duration)
-        self.log("Generating final video...")
+        self.log("Play list generated")
 
     # ================= RUN FFMPEG =================
     def run_ffmpeg(self, cmd, total_duration):
@@ -623,7 +626,11 @@ class PlaylistApp:
                 self.log(line)
 
                 if line.startswith("out_time_ms="):
-                    out_time_ms = int(line.split("=")[1])
+                    value = line.split("=", 1)[1].strip()
+                    if not value.isdigit():
+                        continue
+
+                    out_time_ms = int(value)
                     current_sec = out_time_ms / 1_000_000
                     percent = min((current_sec / duration) * 100, 100)
 
