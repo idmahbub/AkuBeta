@@ -74,22 +74,31 @@ jobs:
           copy C:\ProgramData\chocolatey\bin\ffmpeg.exe bin\
           copy C:\ProgramData\chocolatey\bin\ffprobe.exe bin\
 
-      - name: Build Windows
-        if: runner.os == 'Windows'
-        run: |
-          pyinstaller app.py --name PlaylistApp --windowed --add-data "bin;bin" --add-data "fonts;fonts" --hidden-import=DownloadManager --hidden-import=arabic_reshaper --hidden-import=bidi.algorithm --noconfirm
-
-      - name: Rename Windows build folder
+          - name: Build Windows
+          if: runner.os == 'Windows'
+          run: |
+            pyinstaller app.py `
+              --name PlaylistApp `
+              --windowed `
+              --hidden-import=DownloadManager `
+              --hidden-import=arabic_reshaper `
+              --hidden-import=bidi.algorithm `
+              --add-data "bin;bin" `
+              --add-data "fonts;fonts" `
+              --noconfirm
+        
+      - name: Prepare Windows ZIP
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          Rename-Item dist\PlaylistApp PlaylistApp-Windows
-
-      - name: Zip Windows build
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          Compress-Archive -Path PlaylistApp-Windows -DestinationPath PlaylistApp-Windows.zip
+          $buildPath = "dist\PlaylistApp"
+          if (!(Test-Path $buildPath)) {
+              Write-Error "Build folder not found!"
+              exit 1
+          }
+      
+          Rename-Item $buildPath "PlaylistApp-Windows"
+          Compress-Archive -Path "PlaylistApp-Windows" -DestinationPath "PlaylistApp-Windows.zip"
 
       # ---------- macOS ----------
       - name: Install FFmpeg (Mac)
