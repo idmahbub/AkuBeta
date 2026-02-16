@@ -84,7 +84,7 @@ jobs:
       # Checkout repo FULL agar tag tersedia
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # <--- penting: ambil semua tag
 
       # Download artifacts dari semua OS
       - uses: actions/download-artifact@v4
@@ -100,11 +100,11 @@ jobs:
           name: build-ubuntu-latest
           path: artifacts/linux
 
-      # Buat release dengan tag yang sudah dibuat
+      # Buat release dengan tag yang sudah ada
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ needs.version.outputs.new_tag }}
+          tag: ${{ needs.version.outputs.new_tag }}   # <--- wajib 'tag'
           name: Release ${{ needs.version.outputs.new_tag }}
           artifacts: |
             artifacts/windows/PlaylistApp-windows.exe
