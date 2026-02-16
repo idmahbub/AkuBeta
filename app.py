@@ -7,9 +7,9 @@ import subprocess
 import shlex
 import re
 import platform
-from PIL import ImageFont
 import sys
-
+import textwrap
+import random
 # ================= CROSS PLATFORM FFMPEG =================
 
 def resource_path(relative_path):
@@ -22,6 +22,12 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
+
+def wrap_text_by_chars(text, max_chars=28):
+    lines = []
+    for line in text.split("\n"):
+        lines.extend(textwrap.wrap(line, max_chars))
+    return "\n".join(lines)
 
 def find_binary(name):
     """
@@ -44,6 +50,41 @@ def find_binary(name):
 FFMPEG = find_binary("ffmpeg")
 FFPROBE = find_binary("ffprobe")
 
+
+
+def get_safe_box_color_hex():
+    """
+    Generate box color + text color yang kontras & harmonis.
+    Return:
+        box_color  -> "RRGGBB"
+        text_color -> "RRGGBB"
+    """
+
+    # 1️⃣ Generate dark-modern box color
+    r = random.randint(25, 90)
+    g = random.randint(25, 90)
+    b = random.randint(25, 90)
+
+    box_color = f"{r:02x}{g:02x}{b:02x}"
+
+    # 2️⃣ Hitung luminance (WCAG)
+    def luminance(r, g, b):
+        def channel(c):
+            c = c / 255.0
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+    lum = luminance(r, g, b)
+
+    # 3️⃣ Tentukan warna text berdasarkan kontras
+    if lum < 0.35:
+        # Box cukup gelap → pakai putih clean
+        text_color = "ffffff"
+    else:
+        # Box agak terang → pakai warna gelap elegan
+        text_color = "111111"
+
+    return box_color, text_color
 
 
 class PlaylistApp:
@@ -163,6 +204,135 @@ class PlaylistApp:
                 ("active", accent)
             ]
         )
+    #thumbnail
+    def generate_thumbnail(self, title_text, sub_text):
+        if self.thumb_title_entry.get() == "" and self.thumb_sub_entry.get() == "":
+            return
+            
+        bg = self.bg_entry.get()
+        if not bg or not os.path.exists(bg):
+            messagebox.showerror("Error", "Background image belum dipilih")
+            return
+
+        visual_dir = os.path.dirname(os.path.abspath(bg))
+        base_dir = os.path.dirname(visual_dir)
+        self.output_folder = os.path.join(base_dir, "output")
+        os.makedirs(self.output_folder, exist_ok=True)
+
+        self.bg_name = os.path.splitext(os.path.basename(bg))[0]
+        output_path = os.path.join(self.output_folder, f"{self.bg_name}_thumbnail.png")
+
+        # ===== PRE WRAP =====
+        title_wrapped = wrap_text_by_chars(title_text.upper(), 12)
+        sub_wrapped   = wrap_text_by_chars(sub_text, 32)
+
+        title_file = os.path.join(self.output_folder, "_thumb_title.txt")
+        sub_file   = os.path.join(self.output_folder, "_thumb_sub.txt")
+
+        with open(title_file, "w", encoding="utf-8") as f:
+            f.write(title_wrapped)
+        with open(sub_file, "w", encoding="utf-8") as f:
+            f.write(sub_wrapped)
+
+        font_big = self.get_random_font().replace("\\", "/")
+        font_small = self.get_random_font().replace("\\", "/")
+
+        # ==== thumbnail box params ====
+        W, H = 1280, 720
+        box_width = int(W * 0.5)
+        position = self.box_position_var.get()  # <-- ambil dari radio UI
+        max_alpha = 200
+
+        fade_width = max(1, int(box_width * 0.45))
+        solid_width = box_width - fade_width
+
+        x_box = W - box_width if position == "right" else 0
+        box_color,text_color = get_safe_box_color_hex()
+        shadow_color = "000000" if text_color == "ffffff" else "ffffff"
+        margin = 80
+        if position == "left":
+            alpha_expr = f"if(lte(X,{solid_width}),{max_alpha},{max_alpha}*(1-(X-{solid_width})/{fade_width}))"
+            text_align = "left"
+            x_text = x_box + margin
+        else:
+            alpha_expr = f"if(gte(X,{fade_width}),{max_alpha},{max_alpha}*(X/{fade_width}))"
+            text_align = "right"
+            x_text = f"{x_box}+{box_width}-{margin}-text_w"
+        title_y = 300
+        spacing_between = 40  # jarak antara title dan subtitle
+        filter_complex = f"""
+        [0:v]scale={W}:{H}[bg];
+        color=size={box_width}x{H}:color={box_color},format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{alpha_expr}'[box];
+        [bg][box]overlay={x_box}:0[tmp];
+
+        [tmp]drawtext=
+            fontfile='{font_big}':
+            textfile='{title_file}':
+            fontsize=76:
+            fontcolor={text_color}:
+            text_align={text_align}:
+            line_spacing=14:
+            x={x_text}:
+            y=140:
+            shadowcolor={shadow_color}:
+            shadowx=4:
+            shadowy=4[tmp2];
+
+        [tmp2]drawtext=
+            fontfile='{font_small}':
+            textfile='{sub_file}':
+            fontsize=40:
+            fontcolor=#e0e0e0:
+            text_align={text_align}:
+            line_spacing=10:
+            x={x_text}:
+            y={title_y}+text_h+{spacing_between}:
+            shadowcolor={shadow_color}:
+            shadowx=3:
+            shadowy=3
+        """
+
+        subprocess.run([
+            FFMPEG, "-y", "-i", bg,
+            "-filter_complex", filter_complex,
+            "-frames:v", "1",
+            output_path
+        ], check=True)
+
+        self.log(f"Thumbnail OK → {output_path}")
+
+    def validate_and_generate(self):
+        if not self.playlist_files:
+            messagebox.showwarning(
+                "Playlist Kosong",
+                "Silakan pilih folder playlist terlebih dahulu."
+            )
+            return
+
+        bg = self.bg_entry.get()
+        if not bg or not os.path.exists(bg):
+            messagebox.showwarning(
+                "Background Missing",
+                "Pilih background image terlebih dahulu."
+            )
+            return
+
+        overlay = self.overlay_entry.get()
+        if not overlay or not os.path.exists(overlay):
+            messagebox.showwarning(
+                "Overlay Missing",
+                "Pilih overlay video terlebih dahulu."
+            )
+            return
+
+        self.run_thread(self.generate_visual)
+    def update_visual_button_state(self):
+        if self.playlist_files:
+            self.btn_visual.config(state="normal")
+            self.btn_final.config(state="normal")
+        else:
+            self.btn_visual.config(state="disabled")
+            self.btn_final.config(state="disabled")
 
 
     def _append_log(self, message):
@@ -234,10 +404,19 @@ class PlaylistApp:
 
         # ---- Background ----
         ttk.Label(left, text="Background Image").grid(row=0, column=0, sticky="w")
-        self.bg_entry = ttk.Entry(left)
+
+        self.bg_var = tk.StringVar()
+        self.bg_var.trace_add("write", self.on_background_changed)
+
+        self.bg_entry = ttk.Entry(left, textvariable=self.bg_var)
         self.bg_entry.grid(row=0, column=1, sticky="ew", padx=5)
-        ttk.Button(left, text="Browse", command=self.browse_bg)\
-            .grid(row=0, column=2)
+
+        ttk.Button(
+            left,
+            text="Browse",
+            command=self.browse_bg
+        ).grid(row=0, column=2)
+
 
         # ---- Overlay ----
         ttk.Label(left, text="Overlay Video").grid(row=1, column=0, sticky="w", pady=(8,0))
@@ -245,10 +424,25 @@ class PlaylistApp:
         self.overlay_entry.grid(row=1, column=1, sticky="ew", padx=5, pady=(8,0))
         ttk.Button(left, text="Browse", command=self.browse_overlay)\
             .grid(row=1, column=2, pady=(8,0))
+        
+        # ---- Thumbnail Title ----
+        ttk.Label(left, text="Thumbnail Title")\
+            .grid(row=2, column=0, sticky="w", pady=(10,0))
+
+        self.thumb_title_entry = ttk.Entry(left)
+        self.thumb_title_entry.grid(row=2, column=1, columnspan=2, sticky="ew", padx=5, pady=(10,0))
+
+        # ---- Thumbnail Sub Text ----
+        ttk.Label(left, text="Thumbnail Sub Text")\
+            .grid(row=3, column=0, sticky="w", pady=(5,0))
+
+        self.thumb_sub_entry = ttk.Entry(left)
+        self.thumb_sub_entry.grid(row=3, column=1, columnspan=2, sticky="ew", padx=5, pady=(5,0))
+
 
         # ---- Playlist + Shuffle ----
         playlist_row = ttk.Frame(left)
-        playlist_row.grid(row=2, column=0, columnspan=3, sticky="ew", pady=10)
+        playlist_row.grid(row=5, column=0, columnspan=3, sticky="ew", pady=10)
         playlist_row.columnconfigure(0, weight=1)
 
         ttk.Button(
@@ -271,12 +465,12 @@ class PlaylistApp:
             fg="#eaeaea",
             selectbackground="#3a86ff"
         )
-        self.playlist_box.grid(row=3, column=0, columnspan=3, sticky="nsew")
-        left.rowconfigure(3, weight=1)
+        self.playlist_box.grid(row=6, column=0, columnspan=3, sticky="nsew")
+        left.rowconfigure(6, weight=1)
 
         # ================= CONTROLS =================
         controls = ttk.Frame(left)
-        controls.grid(row=4, column=0, columnspan=3, sticky="ew", pady=10)
+        controls.grid(row=7, column=0, columnspan=3, sticky="ew", pady=10)
         controls.columnconfigure(3, weight=1)
 
         # ---- Box Position + Radio ----
@@ -297,19 +491,21 @@ class PlaylistApp:
             value="right",
             variable=self.box_position_var
         ).grid(row=0, column=2)
-
+        
         # ---- Generate Buttons (Sejajar) ----
         self.btn_visual = ttk.Button(
             controls,
             text="Generate Visual",
-            command=lambda: self.run_thread(self.generate_visual)
+            command=self.validate_and_generate,
+            state="disabled"  # default disable dulu
         )
         self.btn_visual.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
 
         self.btn_final = ttk.Button(
             controls,
             text="Generate Final",
-            command=lambda: self.run_thread(self.generate_final)
+            command=self.validate_and_generate,
+            state="disabled"  # default disable dulu
         )
         self.btn_final.grid(row=1, column=2, columnspan=2, sticky="ew", pady=5, padx=(5,0))
 
@@ -438,6 +634,22 @@ class PlaylistApp:
         if not fonts:
             raise Exception("Tidak ada file .ttf di folder fonts")
         return random.choice(fonts)
+    def on_background_changed(self, *_):
+        bg = self.bg_entry.get()
+        if not bg or not os.path.exists(bg):
+            return
+
+        visual_dir = os.path.dirname(os.path.abspath(bg))
+        base_dir = os.path.dirname(visual_dir)
+
+        output_root = os.path.join(base_dir, "output")
+        self.output_folder = output_root
+        os.makedirs(self.output_folder, exist_ok=True)
+        # nama file background tanpa ekstensi
+        self.bg_name = os.path.splitext(os.path.basename(bg))[0]
+
+        self.log(f"Output folder: {output_root}")
+
     def generate_visual(self):
         self.log("Generating visual...")
         bg = self.bg_entry.get()
@@ -447,8 +659,12 @@ class PlaylistApp:
         # somefolder (parent dari folder visual)
         visual_dir = os.path.dirname(os.path.abspath(bg))       # somefolder/visual
         base_dir = os.path.dirname(visual_dir)                  # somefolder
-        # nama file background tanpa ekstensi
-        self.bg_name = os.path.splitext(os.path.basename(bg))[0]
+        
+        #generate thumbnail
+        self.generate_thumbnail(
+            self.thumb_title_entry.get(),
+            self.thumb_sub_entry.get()
+        )
         # somefolder/output/visualname
         output_root = os.path.join(base_dir, "output")
         self.output_folder = output_root
@@ -472,7 +688,6 @@ class PlaylistApp:
         # ================= CALCULATE BOX SIZE =================
         fontsize = 42
         line_spacing = 12
-        font = ImageFont.truetype(font_path, fontsize)
         screen_width = 1920
         screen_height = 1080
         box_width = int(screen_width * 0.50)  # 65% dari layar
@@ -506,24 +721,33 @@ class PlaylistApp:
                 f"{max_alpha},"
                 f"{max_alpha}*(X/{fade_width}))"
             )
+        box_color,text_color = get_safe_box_color_hex()
+        shadow_color = "000000" if text_color == "ffffff" else "ffffff"
             
         filter_complex = f"""
             [0:v]scale={screen_width}:{screen_height}[bg];
-            color=black:size={box_width}x{screen_height},format=rgba,geq=r=0:g=0:b=0:a='{alpha_expr}'[grad];
+
+            color=color=#{box_color}:size={box_width}x{screen_height},format=rgba,
+            geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{alpha_expr}'[grad];
+
             [bg][grad]overlay=x={x_box}:y=0[bg_box];
+
             [bg_box]drawtext=
                 fontfile='{font_path}':
                 textfile='{text_file}':
-                fontcolor=white:
+                fontcolor=#{text_color}:
                 fontsize={fontsize}:
                 text_align={text_align}:
                 line_spacing={line_spacing}:
                 x={x_drawtext}:
                 y={y_drawtext}:
-                shadowcolor=black:
+                shadowcolor=#{shadow_color}:
                 shadowx=3:
                 shadowy=3[bg_text];
-            [1:v]scale={screen_width}:{screen_height},format=yuva420p,colorchannelmixer=aa=0.3[ov];
+
+            [1:v]scale={screen_width}:{screen_height},format=yuva420p,
+            colorchannelmixer=aa=0.3[ov];
+
             [bg_text][ov]overlay=0:0
             """
         output_path = os.path.join(self.output_folder, f"{self.bg_name}_visual_playlist.mp4")
@@ -675,10 +899,12 @@ class PlaylistApp:
             if f.endswith(".mp3")
         ]
         self.update_playlist_box()
+        self.update_visual_button_state()
     def update_playlist_box(self):
         self.playlist_box.delete(0, tk.END)
         for f in self.playlist_files:
             self.playlist_box.insert(tk.END, os.path.basename(f))
+        self.update_visual_button_state()
     def shuffle_playlist(self):
         random.shuffle(self.playlist_files)
         self.update_playlist_box()
