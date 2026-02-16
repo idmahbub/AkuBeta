@@ -845,9 +845,11 @@ class PlaylistApp:
         ]
         self.run_ffmpeg(cmd, total_duration=60)  # <-- total_duration bisa disesuaikan
         self.play_video_preview(output_path)
+    
     # ================= FINAL =================
     def generate_final(self):
         self.log("Generating final video...")
+        encoder = self.detect_gpu_encoder()
 
         if not self.playlist_files:
             messagebox.showerror("Error", "Playlist kosong")
