@@ -17,10 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.tag.outputs.new_tag }}
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Get latest tag
         id: tag
         run: |
@@ -34,7 +32,6 @@ jobs:
             patch=$((patch+1))
             new_tag="v$major.$minor.$patch"
           fi
-
           echo "New tag: $new_tag"
           git tag $new_tag
           git push origin $new_tag
@@ -48,17 +45,13 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
-
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: |
           pip install pyinstaller yt-dlp
@@ -66,16 +59,16 @@ jobs:
       # ---------- Build per OS ----------
       - name: Build Windows
         if: runner.os == 'Windows'
-        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts;fonts" --add-data "bin;bin"
+        run: pyinstaller app.py --onefile --windowed --name PlaylistApp-windows --add-data "fonts;fonts" --add-data "bin;bin"
         shell: cmd
 
       - name: Build Mac
         if: runner.os == 'macOS'
-        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts:fonts" --add-data "bin:bin"
+        run: pyinstaller app.py --onefile --windowed --name PlaylistApp-macos --add-data "fonts:fonts" --add-data "bin:bin"
 
       - name: Build Linux
         if: runner.os == 'Linux'
-        run: pyinstaller app.py --onefile --windowed --name PlaylistApp --add-data "fonts:fonts" --add-data "bin:bin"
+        run: pyinstaller app.py --onefile --windowed --name PlaylistApp-linux --add-data "fonts:fonts" --add-data "bin:bin"
 
       # ---------- Upload artifact per OS ----------
       - name: Upload artifact per OS
@@ -88,14 +81,13 @@ jobs:
   # CREATE RELEASE
   # =========================
   release:
-    needs: [version, build]
+    needs: build
     runs-on: ubuntu-latest
-
     steps:
       - name: Debug new tag
         run: echo "Releasing tag ${{ needs.version.outputs.new_tag }}"
 
-      # Download artifacts
+      # Download artifacts per OS
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
@@ -121,8 +113,8 @@ jobs:
           tag_name: ${{ needs.version.outputs.new_tag }}
           name: Release ${{ needs.version.outputs.new_tag }}
           files: |
-            artifacts/windows/*
-            artifacts/macos/*
-            artifacts/linux/*
+            artifacts/windows/PlaylistApp-windows.exe
+            artifacts/macos/PlaylistApp-macos
+            artifacts/linux/PlaylistApp-linux
           overwrite_files: true
           token: ${{ secrets.GITHUB_TOKEN }}
