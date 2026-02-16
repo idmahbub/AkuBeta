@@ -11,6 +11,7 @@ import sys
 import textwrap
 import random
 import arabic_reshaper
+from PIL import Image, ImageTk
 from bidi.algorithm import get_display
 # ================= CROSS PLATFORM FFMPEG =================
 
@@ -304,10 +305,10 @@ class PlaylistApp:
             "-frames:v", "1",
             output_path
         ], check=True)
-
+        self.show_image_preview(output_path)
         self.log(f"Thumbnail OK → {output_path}")
 
-    def validate_and_generate(self,type="visual"):
+    def validate_and_generate(self,mode="visual"):
         if not self.playlist_files:
             messagebox.showwarning(
                 "Playlist Kosong",
@@ -330,9 +331,9 @@ class PlaylistApp:
                 "Pilih overlay video terlebih dahulu."
             )
             return
-        if type == "visual":
+        if mode == "visual":
             self.run_thread(self.generate_visual)
-        if type == "final":
+        if mode == "final":
             self.run_thread(self.generate_final)
     def update_visual_button_state(self):
         if self.playlist_files:
@@ -369,7 +370,7 @@ class PlaylistApp:
             current_time += duration
         description_text = "\n".join(timestamps)
         # Simpan ke file
-        desc_path = os.path.join(self.output_folder, "youtube_description.txt")
+        desc_path = os.path.join(self.output_folder, f"{self.bg_name}_youtube_description.txt")
         with open(desc_path, "w", encoding="utf-8") as f:
             f.write(description_text)
         return description_text
@@ -539,27 +540,95 @@ class PlaylistApp:
             mode="determinate"
         )
         self.progress.grid(row=3, column=0, columnspan=4, sticky="ew", pady=5)
-
-        # ================= RIGHT PANEL (LOG) =================
+        # ================= RIGHT PANEL =================
         right = ttk.Frame(main, style="Panel.TFrame")
         right.grid(row=0, column=1, sticky="nsew")
-        right.rowconfigure(1, weight=1)
+
         right.columnconfigure(0, weight=1)
+        right.rowconfigure(3, weight=1)
 
-        ttk.Label(right, text="FFmpeg Log").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        ttk.Label(right, text="Preview").grid(row=0, column=0, sticky="w", padx=5)
 
-        self.log_text = tk.Text(
-            right,
-            wrap="word",
-            bg="#2b2b2b",
-            fg="#eaeaea",
-            insertbackground="white"
-        )
-        self.log_text.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        preview_frame = tk.Frame(right, height=220, bg="#1e1e1e")
+        preview_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        preview_frame.grid_propagate(False)
 
-        scrollbar = ttk.Scrollbar(right, command=self.log_text.yview)
-        scrollbar.grid(row=1, column=1, sticky="ns")
+        self.preview_label = tk.Label(preview_frame, bg="#1e1e1e")
+        self.preview_label.pack(expand=True)
+
+        ttk.Label(right, text="FFmpeg Log").grid(row=2, column=0, sticky="w", padx=5)
+
+        log_frame = ttk.Frame(right)
+        log_frame.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
+
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+
+        self.log_text = tk.Text(log_frame, bg="#2b2b2b", fg="#eaeaea")
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+
+        scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
         self.log_text.configure(yscrollcommand=scrollbar.set)
+    
+    def play_video_preview(self, video_path):
+
+        width = 400
+        height = 220
+
+        cmd = [
+            "ffmpeg",
+            "-i", video_path,
+            "-f", "image2pipe",
+            "-pix_fmt", "rgb24",
+            "-vcodec", "rawvideo",
+            "-vf", f"fps=24,scale={width}:{height}",
+            "-vf", f"scale={width}:{height}",
+            "-"
+        ]
+
+        self.process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL
+        )
+
+        threading.Thread(
+            target=self.read_frames,
+            args=(width, height),
+            daemon=True
+        ).start()
+    def read_frames(self, width, height):
+
+        frame_size = width * height * 3
+
+        while True:
+            raw = self.process.stdout.read(frame_size)
+            if len(raw) != frame_size:
+                break
+
+            img = Image.frombytes("RGB", (width, height), raw)
+            imgtk = ImageTk.PhotoImage(img)
+
+            self.preview_label.imgtk = imgtk
+            self.preview_label.configure(image=imgtk)
+    def stop_preview(self):
+        if hasattr(self, "process"):
+            self.process.terminate()
+    
+    def show_image_preview(self, image_path, max_width=400):
+        img = Image.open(image_path)
+
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+
+        img = img.resize((max_width, new_height))
+        
+        photo = ImageTk.PhotoImage(img)
+
+        self.preview_label.config(image=photo)
+        self.preview_label.image = photo  # prevent garbage collect
     def build_download_tab(self, parent):
         from DownloadManager import DownloadManager
         self.download_manager = DownloadManager(parent)
@@ -735,32 +804,26 @@ class PlaylistApp:
         box_color,text_color = get_safe_box_color_hex()
         shadow_color = "000000" if text_color == "ffffff" else "ffffff"
             
-        filter_complex = f"""
-            [0:v]scale={screen_width}:{screen_height}[bg];
-
-            color=color=#{box_color}:size={box_width}x{screen_height},format=rgba,
-            geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{alpha_expr}'[grad];
-
-            [bg][grad]overlay=x={x_box}:y=0[bg_box];
-
-            [bg_box]drawtext=
-                fontfile='{font_path}':
-                textfile='{text_file}':
-                fontcolor=#{text_color}:
-                fontsize={fontsize}:
-                text_align={text_align}:
-                line_spacing={line_spacing}:
-                x={x_drawtext}:
-                y={y_drawtext}:
-                shadowcolor=#{shadow_color}:
-                shadowx=3:
-                shadowy=3[bg_text];
-
-            [1:v]scale={screen_width}:{screen_height},format=yuva420p,
-            colorchannelmixer=aa=0.3[ov];
-
-            [bg_text][ov]overlay=0:0
-            """
+        filter_complex = (
+            f"[0:v]scale={screen_width}:{screen_height}[bg];"
+            f"color=color=#{box_color}:size={box_width}x{screen_height},format=rgba,"
+            f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{alpha_expr}'[grad];"
+            f"[bg][grad]overlay=x={x_box}:y=0[bg_box];"
+            f"[bg_box]drawtext="
+            f"fontfile='{font_path}':"
+            f"textfile='{text_file}':"
+            f"fontcolor=#{text_color}:"
+            f"fontsize={fontsize}:"
+            f"line_spacing={line_spacing}:"
+            f"x={x_drawtext}:"
+            f"y={y_drawtext}:"
+            f"shadowcolor=#{shadow_color}:"
+            f"shadowx=3:"
+            f"shadowy=3[bg_text];"
+            f"[1:v]scale={screen_width}:{screen_height},format=yuva420p,"
+            f"colorchannelmixer=aa=0.3[ov];"
+            f"[bg_text][ov]overlay=0:0"
+        )
         output_path = os.path.join(self.output_folder, f"{self.bg_name}_visual_playlist.mp4")
         cmd = [
             FFMPEG,
@@ -778,7 +841,8 @@ class PlaylistApp:
             "-crf", "28",
             output_path
         ]
-        self.run_ffmpeg(" ".join(shlex.quote(x) for x in cmd), total_duration=60)  # <-- total_duration bisa disesuaikan
+        self.run_ffmpeg(cmd, total_duration=60)  # <-- total_duration bisa disesuaikan
+        self.play_video_preview(output_path)
     # ================= FINAL =================
     def generate_final(self):
         self.log("Generating final video...")
@@ -812,11 +876,15 @@ class PlaylistApp:
             "-c", "copy",
             combined_path
         ]
-        subprocess.run(combine_cmd, check=True)
+        self.run_ffmpeg(combine_cmd, total_duration=1)
         # ================= GET AUDIO DURATION =================
         audio_duration = self.get_media_duration(combined_path)
         # ================= FINAL VIDEO =================
-        output_path = os.path.join(self.output_folder, f"{self.bg_name}_final_youtube.mp4")
+        output_path = os.path.join(
+            self.output_folder,
+            f"{self.bg_name}_final_youtube.mp4"
+        )
+
         cmd = [
             FFMPEG,
             "-y",
@@ -833,20 +901,30 @@ class PlaylistApp:
             "-movflags", "+faststart",
             output_path
         ]
-        self.run_ffmpeg(" ".join(shlex.quote(x) for x in cmd), total_duration=audio_duration)
+
+        self.run_ffmpeg(cmd, total_duration=audio_duration)
         self.log("Play list generated")
 
     # ================= RUN FFMPEG =================
     def run_ffmpeg(self, cmd, total_duration):
-        cmd = cmd.replace(FFMPEG, f"{FFMPEG} -progress pipe:1 -nostats")
 
-        self.log(f">>> {cmd}\n")
+        # Pastikan cmd adalah list
+        if not isinstance(cmd, list):
+            raise ValueError("run_ffmpeg expects cmd as list")
+
+        # Sisipkan progress args setelah ffmpeg
+        cmd = cmd.copy()
+        cmd.insert(1, "-progress")
+        cmd.insert(2, "pipe:1")
+        cmd.insert(3, "-nostats")
+
+        self.log(">>> " + " ".join(cmd) + "\n")
 
         self.process = subprocess.Popen(
-            shlex.split(cmd),
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines=True,
+            text=True,
             bufsize=1
         )
 
