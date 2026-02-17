@@ -71,26 +71,24 @@ jobs:
 
 
       # ================= WINDOWS =================
-      - name: Install FFmpeg (Windows)
+      - name: Download FFmpeg Binary (Windows)
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          choco install ffmpeg -y
+          $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          $zip = "ffmpeg.zip"
+
+          Invoke-WebRequest $url -OutFile $zip
+
+          Expand-Archive $zip -DestinationPath ffmpeg
 
           New-Item -ItemType Directory -Force -Path bin
 
-          $ffmpegPath = "C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffmpeg.exe"
-          $ffprobePath = "C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffprobe.exe"
-
-          if (!(Test-Path $ffmpegPath)) {
-              Write-Error "Real ffmpeg.exe not found!"
-              exit 1
-          }
-
-          Copy-Item $ffmpegPath bin\ffmpeg.exe
-          Copy-Item $ffprobePath bin\ffprobe.exe
+          Copy-Item ffmpeg\ffmpeg-*\bin\ffmpeg.exe bin\ffmpeg.exe
+          Copy-Item ffmpeg\ffmpeg-*\bin\ffprobe.exe bin\ffprobe.exe
 
           Get-Item bin\ffmpeg.exe
+
 
 
       - name: Build Windows (ONEDIR)
