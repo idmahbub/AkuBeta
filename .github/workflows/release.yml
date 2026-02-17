@@ -79,14 +79,18 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path bin
 
-          $ffmpeg = (Get-Command ffmpeg).Source
-          $ffprobe = (Get-Command ffprobe).Source
+          $ffmpegPath = "C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffmpeg.exe"
+          $ffprobePath = "C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffprobe.exe"
 
-          Write-Host "FFmpeg real path: $ffmpeg"
-          Write-Host "FFprobe real path: $ffprobe"
+          if (!(Test-Path $ffmpegPath)) {
+              Write-Error "Real ffmpeg.exe not found!"
+              exit 1
+          }
 
-          Copy-Item $ffmpeg bin\ffmpeg.exe
-          Copy-Item $ffprobe bin\ffprobe.exe
+          Copy-Item $ffmpegPath bin\ffmpeg.exe
+          Copy-Item $ffprobePath bin\ffprobe.exe
+
+          Get-Item bin\ffmpeg.exe
 
 
       - name: Build Windows (ONEDIR)
