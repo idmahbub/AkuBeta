@@ -219,6 +219,14 @@ class PlaylistApp:
         if not bg or not os.path.exists(bg):
             messagebox.showerror("Error", "Background image belum dipilih")
             return
+        if not os.path.exists(self.get_random_font()):
+            messagebox.showerror("Error", "Font tidak ditemukan")
+            return
+
+        # Periksa file teks
+        if not os.path.exists(title_file):
+            messagebox.showerror("Error", f"File teks judul '{title_file}' tidak ditemukan.")
+            return
 
         visual_dir = os.path.dirname(os.path.abspath(bg))
         base_dir = os.path.dirname(visual_dir)
@@ -242,7 +250,8 @@ class PlaylistApp:
 
         font_big = ffmpeg_path(self.get_random_font())
         font_small = ffmpeg_path(self.get_random_font())
-
+        title_file = ffmpeg_path(title_file)
+        sub_file   = ffmpeg_path(sub_file)
         # ==== thumbnail box params ====
         W, H = 1280, 720
         box_width = int(W * 0.5)
