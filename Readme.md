@@ -37,3 +37,19 @@ folder/
     --add-binary "bin/ffmpeg.exe;bin" `
     --add-binary "bin/ffprobe.exe;bin"
 ``
+
+# For developer:
+``  git checkout master
+    coding...
+    git add .
+    git commit -m "new feature"
+    git push origin master
+``
+
+# For release:
+``
+    git checkout main
+    git pull
+    git merge master
+    git push origin main
+``
