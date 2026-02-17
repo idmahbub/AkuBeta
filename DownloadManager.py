@@ -3,6 +3,8 @@ from tkinter import filedialog, messagebox, ttk
 import os
 import subprocess, threading, platform
 import sys
+import shutil
+import signal
 
 # ================= RESOURCE PATH =================
 
@@ -16,13 +18,20 @@ def resource_path(relative_path):
 
 def find_binary(name):
     exe = name + ".exe" if os.name == "nt" else name
+
     bundled = resource_path(os.path.join("bin", exe))
 
-    if os.path.exists(bundled):
+    if os.path.isfile(bundled) and os.access(bundled, os.X_OK):
         return bundled
 
-    return exe
+    system = shutil.which(name)
+    if system:
+        return system
+
+    raise FileNotFoundError(f"{name} not found")
 YTDLP = find_binary("yt-dlp")
+FFMPEG = find_binary("ffmpeg")
+FFPROBE = find_binary("ffprobe")
 
 class DownloadManager:
     def __init__(self, parent):
@@ -33,9 +42,11 @@ class DownloadManager:
         self.download_thread = None
         self.is_downloading = False
         self.process = None
+        self.download_process = None
+        self.stop_event = threading.Event()
 
         self.build_ui()
-        
+       
     def browse_folder(self):
         path = filedialog.askdirectory()
         if path:
@@ -96,12 +107,21 @@ class DownloadManager:
         self.batch_entry = ttk.Entry(left, textvariable=self.batch_var)
         self.batch_entry.pack(fill="x")
         # download button
-        self.btn_download = ttk.Button(
-            left,
+        btn_frame = ttk.Frame(left)   # parent = frame/tab tempat download
+        btn_frame.pack(pady=10)
+        self.download_btn = ttk.Button(
+            btn_frame,
             text="Start Download",
             command=self.start_download
         )
-        self.btn_download.pack(fill="x", pady=15)
+        self.download_btn.pack(side="left", padx=5)
+        self.stop_btn = ttk.Button(
+            btn_frame,
+            text="Stop",
+            command=self.stop_download,
+            state="disabled"
+        )
+        self.stop_btn.pack(side="left", padx=5)
 
         # ===== RIGHT PANEL (LOG) =====
         right = ttk.Frame(self.frame, style="Panel.TFrame")
@@ -172,7 +192,10 @@ class DownloadManager:
         os.makedirs(folder, exist_ok=True)
 
         self.is_downloading = True
-        self.btn_download.config(state="disabled")
+        
+        self.stop_event.clear()
+        self.download_btn.config(state="disabled")
+        self.stop_btn.config(state="normal")
 
         self.download_thread = threading.Thread(
             target=self.run_download,
@@ -180,6 +203,23 @@ class DownloadManager:
             daemon=True
         )
         self.download_thread.start()
+    def stop_download(self):
+        self.stop_event.set()
+
+        if self.process:
+            try:
+                if platform.system() == "Windows":
+                    self.process.send_signal(subprocess.signal.CTRL_BREAK_EVENT)
+                else:
+                    os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+
+                self.log("⛔ Download dihentikan")
+            except Exception as e:
+                self.log(f"Stop error: {e}")
+
+        self.stop_btn.config(state="disabled")
+        self.download_btn.config(state="normal")
+
 
     # ================= yt-dlp =================
     def run_download(self, list_path, folder, fmt, batch_size):
@@ -187,11 +227,15 @@ class DownloadManager:
             self.log("Starting download...")
             self.log(f"Format : {fmt}")
             self.log(f"Output : {folder}\n")
-
+            self.log(f"YTDLP  : {YTDLP}")
+            self.log(f"FFMPEG : {FFMPEG}")
+            self.log(f"FFPROBE: {FFPROBE}")
+           
             if fmt == "mp3":
                 cmd = [
                     YTDLP,
                     "-a", list_path,
+                    "--ffmpeg-location",FFMPEG,
                     "-x",
                     "--audio-format", "mp3",
                     "--audio-quality", "0",
@@ -201,23 +245,43 @@ class DownloadManager:
                 cmd = [
                     YTDLP,
                     "-a", list_path,
+                    "--ffmpeg-location", FFMPEG,
                     "-f", "bv*+ba/b",
                     "--merge-output-format", "mp4",
                     "-o", os.path.join(folder, "%(title)s.%(ext)s")
                 ]
+            self.log(f"Using ffmpeg from: {FFMPEG}")
 
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
+            if platform.system() == "Windows":
+                self.process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                )
+            else:
+                self.process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    preexec_fn=os.setsid
+                )
+
 
             for line in self.process.stdout:
+                if self.stop_event.is_set():
+                    break
                 self.log(line.strip())
 
             self.process.wait()
+            # 👇 TAMBAHKAN DI SINI
+            if self.stop_event.is_set() or self.process.returncode != 0:
+                self.log("Download dihentikan atau gagal, skip organize.")
+                return
             self.log("\nDownload finished ✅")
             if fmt == "mp3":
                 self.split_into_batches(folder, batch_size)
@@ -228,7 +292,8 @@ class DownloadManager:
         finally:
             self.is_downloading = False
             self.process = None
-            self.btn_download.config(state="normal")
+            self.stop_btn.config(state="disabled"),
+            self.download_btn.config(state="normal")
             self.open_folder(folder)
     def split_into_batches(self, folder, batch_size):
         self.log("\nOrganizing files into folders...")
