@@ -223,10 +223,7 @@ class PlaylistApp:
             messagebox.showerror("Error", "Font tidak ditemukan")
             return
 
-        # Periksa file teks
-        if not os.path.exists(title_file):
-            messagebox.showerror("Error", f"File teks judul '{title_file}' tidak ditemukan.")
-            return
+        
 
         visual_dir = os.path.dirname(os.path.abspath(bg))
         base_dir = os.path.dirname(visual_dir)
@@ -242,10 +239,13 @@ class PlaylistApp:
 
         title_file = os.path.join(self.output_folder, "_thumb_title.txt")
         sub_file   = os.path.join(self.output_folder, "_thumb_sub.txt")
-
-        with open(title_file, "w", encoding="utf-8") as f:
+        # Periksa file teks
+        if not os.path.exists(title_file):
+            messagebox.showerror("Error", f"File teks judul '{title_file}' tidak ditemukan.")
+            return
+        with open(title_file, "w", encoding="utf-8", newline="\n") as f:
             f.write(title_wrapped)
-        with open(sub_file, "w", encoding="utf-8") as f:
+        with open(sub_file, "w", encoding="utf-8", newline="\n") as f:
             f.write(sub_wrapped)
 
         font_big = ffmpeg_path(self.get_random_font())
@@ -769,16 +769,17 @@ class PlaylistApp:
             playlist_text.append(fixed_text)
         playlist_text_str = "\n".join(playlist_text)
         playlist_text_str = fix_mixed_text(playlist_text_str)
+        
         # buat file sementara supaya multiline aman
         text_file_os = os.path.join(self.output_folder, f"{self.bg_name}_playlist.txt")
-        with open(text_file_os, "w", encoding="utf-8") as f:
+        with open(text_file_os, "w", encoding="utf-8", newline="\n") as f:
             f.write(playlist_text_str)
 
         text_file = ffmpeg_path(text_file_os)
 
         # ================= CALCULATE BOX SIZE =================
         fontsize = 42
-        line_spacing = 12
+        line_spacing = max(6, int(fontsize * 0.12))
         screen_width = 1920
         screen_height = 1080
         box_width = int(screen_width * 0.50)  # 65% dari layar
@@ -798,7 +799,6 @@ class PlaylistApp:
         fade_width = max(1, int(box_width * 0.45))
         solid_width = box_width - fade_width
         max_alpha = 200  # 0–255 (atur opacity di sini)
-        
 
         if position == "left":
             alpha_expr = (
