@@ -82,15 +82,15 @@ jobs:
 
       - name: Build Windows (ONEDIR)
         if: runner.os == 'Windows'
+        shell: powershell
         run: |
-          pyinstaller app.py `
-            --name PlaylistApp `
-            --windowed `
-            --noconfirm `
-            --clean `
+          pyinstaller app.py --name PlaylistApp --windowed --noconfirm --clean `
+            --hidden-import arabic_reshaper `
+            --hidden-import bidi.algorithm `
             --add-data "fonts;fonts" `
             --add-binary "bin/ffmpeg.exe;bin" `
             --add-binary "bin/ffprobe.exe;bin"
+        
 
       - name: Package Windows (ZIP)
         if: runner.os == 'Windows'
