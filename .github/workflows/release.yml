@@ -45,7 +45,7 @@ jobs:
 
 
   # =========================
-  # BUILD CROSS PLATFORM
+  # BUILD
   # =========================
   build:
     needs: version
@@ -69,30 +69,38 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+
       # ================= WINDOWS =================
       - name: Install FFmpeg (Windows)
         if: runner.os == 'Windows'
+        shell: powershell
         run: |
           choco install ffmpeg -y
-          if (!(Test-Path "bin")) {
-              New-Item -ItemType Directory -Path "bin"
-          }
+          New-Item -ItemType Directory -Force -Path bin
           copy C:\ProgramData\chocolatey\bin\ffmpeg.exe bin\
           copy C:\ProgramData\chocolatey\bin\ffprobe.exe bin\
 
-      - name: Build Windows (One File EXE)
+      - name: Build Windows (ONEDIR)
         if: runner.os == 'Windows'
-        run: pyinstaller app.py --name PlaylistApp --windowed --onefile --hidden-import=DownloadManager --hidden-import=arabic_reshaper --hidden-import=bidi.algorithm --add-data "bin;bin" --add-data "fonts;fonts" --noconfirm
+        run: |
+          pyinstaller app.py `
+            --name PlaylistApp `
+            --windowed `
+            --noconfirm `
+            --clean `
+            --add-data "fonts;fonts" `
+            --add-binary "bin/ffmpeg.exe;bin" `
+            --add-binary "bin/ffprobe.exe;bin"
 
-      - name: Package Windows
+      - name: Package Windows (ZIP)
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          if (!(Test-Path "dist\PlaylistApp.exe")) {
-              Write-Error "dist\PlaylistApp.exe not found!"
-              exit 1
+          if (!(Test-Path "dist\PlaylistApp")) {
+            Write-Error "dist\PlaylistApp folder not found!"
+            exit 1
           }
-          Compress-Archive -Path "dist\PlaylistApp.exe" -DestinationPath "PlaylistApp-Windows.zip"
+          Compress-Archive -Path dist\PlaylistApp -DestinationPath PlaylistApp-Windows.zip
 
 
       # ================= MAC =================
@@ -104,20 +112,18 @@ jobs:
           cp $(which ffmpeg) bin/
           cp $(which ffprobe) bin/
 
-      - name: Build Mac (.app Bundle)
+      - name: Build Mac (ONEDIR .app)
         if: runner.os == 'macOS'
         run: |
           pyinstaller app.py \
             --name PlaylistApp \
             --windowed \
-            --hidden-import=DownloadManager \
-            --hidden-import=arabic_reshaper \
-            --hidden-import=bidi.algorithm \
+            --noconfirm \
+            --clean \
             --add-data "fonts:fonts" \
-            --add-data "bin:bin" \
-            --noconfirm
+            --add-data "bin:bin"
 
-      - name: Package Mac
+      - name: Package Mac (ZIP)
         if: runner.os == 'macOS'
         run: |
           if [ ! -d "dist/PlaylistApp.app" ]; then
@@ -132,9 +138,8 @@ jobs:
       - name: Upload ZIP Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ runner.os }}
+          name: release-${{ runner.os }}
           path: "*.zip"
-
 
 
   # =========================

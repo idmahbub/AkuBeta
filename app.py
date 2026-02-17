@@ -922,11 +922,10 @@ class PlaylistApp:
     # ================= RUN FFMPEG =================
     def run_ffmpeg(self, cmd, total_duration):
 
-        # Pastikan cmd adalah list
         if not isinstance(cmd, list):
             raise ValueError("run_ffmpeg expects cmd as list")
 
-        # Sisipkan progress args setelah ffmpeg
+        # ===== inject progress flags =====
         cmd = cmd.copy()
         cmd.insert(1, "-progress")
         cmd.insert(2, "pipe:1")
@@ -934,13 +933,21 @@ class PlaylistApp:
 
         self.log(">>> " + " ".join(cmd) + "\n")
 
-        self.process = subprocess.Popen(
-            cmd,
+        popen_kwargs = dict(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1
+            bufsize=1,
+            universal_newlines=True
         )
+
+        # 🔒 HIDE CONSOLE WINDOW (WINDOWS ONLY)
+        if platform.system() == "Windows":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+        self.is_rendering = True
+
+        self.process = subprocess.Popen(cmd, **popen_kwargs)
 
         duration = max(total_duration, 1)
 
@@ -967,7 +974,8 @@ class PlaylistApp:
                     )
 
             self.process.wait()
-            if self.process.returncode != 0:
+
+            if self.process.returncode != 0 and self.is_rendering:
                 raise RuntimeError("FFmpeg failed")
 
         except Exception as e:
@@ -975,13 +983,17 @@ class PlaylistApp:
 
         finally:
             self.process = None
+            self.is_rendering = False
             self.root.after(0, lambda: self.progress.config(value=100))
+
 
     # ================= CANCEL =================
     def cancel_render(self):
         if not self.process:
             return
+
         self.is_rendering = False
+
         try:
             self.process.terminate()
             try:
@@ -989,10 +1001,12 @@ class PlaylistApp:
             except subprocess.TimeoutExpired:
                 self.process.kill()
         except Exception as e:
-            print("Cancel error:", e)
+            self.log(f"Cancel error: {e}")
+
         self.process = None
         self.root.after(0, lambda: self.progress.config(value=0))
         messagebox.showinfo("Cancelled", "Rendering dihentikan.")
+
     # ================= PLAYLIST =================
     def select_playlist_folder(self):
         folder = filedialog.askdirectory()

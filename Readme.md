@@ -36,3 +36,7 @@ folder/
     --noconfirm
 
 ``
+# win build one dir
+``
+    pyinstaller --noconfirm --clean --windowed --name PlaylistApp --add-data "fonts;fonts" --add-binary "bin/ffmpeg.exe;bin" --add-binary "bin/ffprobe.exe;bin" app.py
+``
