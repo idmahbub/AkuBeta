@@ -63,8 +63,10 @@ class DownloadManager:
 
     # ================= UI =================
     def build_ui(self):
-        self.frame.columnconfigure(0, weight=3)
-        self.frame.columnconfigure(1, weight=2)
+        self.frame.columnconfigure(0, weight=1)
+        self.frame.columnconfigure(1, weight=0, minsize=450)
+
+
         self.frame.rowconfigure(0, weight=1)
 
         # ===== LEFT PANEL =====

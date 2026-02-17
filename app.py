@@ -407,7 +407,13 @@ class PlaylistApp:
             self.build_download_tab(self.tab_download)
 
     # ================= UI =================
+    def show_text_menu(self, event):
+        try:
+            self.text_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.text_menu.grab_release()
     def build_generate_tab(self, parent):
+
         main = ttk.Frame(parent)
         main.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -462,18 +468,34 @@ class PlaylistApp:
         playlist_row = ttk.Frame(left)
         playlist_row.grid(row=5, column=0, columnspan=3, sticky="ew", pady=10)
         playlist_row.columnconfigure(0, weight=1)
+        playlist_row.columnconfigure(1, weight=1)
+        playlist_row.columnconfigure(2, weight=0)
+        playlist_row.columnconfigure(3, weight=0)
 
         ttk.Button(
             playlist_row,
-            text="Select Mp3 Folder",
+            text="Select Folder",
             command=self.select_playlist_folder
         ).grid(row=0, column=0, sticky="ew")
 
         ttk.Button(
             playlist_row,
+            text="Select MP3 Files",
+            command=self.select_multiple_mp3
+        ).grid(row=0, column=1, sticky="ew", padx=5)
+
+        ttk.Button(
+            playlist_row,
             text="Shuffle",
             command=self.shuffle_playlist
-        ).grid(row=0, column=1, padx=5)
+        ).grid(row=0, column=2, padx=5)
+
+        ttk.Button(
+            playlist_row,
+            text="Clear",
+            command=self.clear_playlist
+        ).grid(row=0, column=3, padx=5)
+
 
         # ---- Playlist Listbox ----
         self.playlist_box = tk.Listbox(
@@ -483,8 +505,18 @@ class PlaylistApp:
             fg="#eaeaea",
             selectbackground="#3a86ff"
         )
+
+        if platform.system() == "Darwin":  # MacOS
+            self.playlist_box.bind("<Button-2>", self.show_playlist_menu)
+        else:
+            self.playlist_box.bind("<Button-3>", self.show_playlist_menu)
         self.playlist_box.grid(row=6, column=0, columnspan=3, sticky="nsew")
         left.rowconfigure(6, weight=1)
+        self.playlist_menu = tk.Menu(self.root, tearoff=0)
+        self.playlist_menu.add_command(
+            label="Delete Selected",
+            command=self.delete_selected_song
+        )
 
         # ================= CONTROLS =================
         controls = ttk.Frame(left)
@@ -580,6 +612,33 @@ class PlaylistApp:
         scrollbar.grid(row=0, column=1, sticky="ns")
 
         self.log_text.configure(yscrollcommand=scrollbar.set)
+        # ================= CONTEXT MENU (TEXT) =================
+
+        self.text_menu = tk.Menu(self.root, tearoff=0)
+        self.text_menu.add_command(
+            label="Cut",
+            command=lambda: self.root.focus_get().event_generate("<<Cut>>")
+        )
+        self.text_menu.add_command(
+            label="Copy",
+            command=lambda: self.root.focus_get().event_generate("<<Copy>>")
+        )
+        self.text_menu.add_command(
+            label="Paste",
+            command=lambda: self.root.focus_get().event_generate("<<Paste>>")
+        )
+
+        def bind_text_context(widget):
+            widget.bind("<Button-3>", self.show_text_menu)  # Windows
+            widget.bind("<Button-2>", self.show_text_menu)  # Mac
+
+        # bind ke semua widget input
+        bind_text_context(self.thumb_title_entry)
+        bind_text_context(self.thumb_sub_entry)
+        bind_text_context(self.log_text)
+        bind_text_context(self.bg_entry)
+        bind_text_context(self.overlay_entry)
+
     
     def play_video_preview(self, video_path):
 
@@ -1008,25 +1067,80 @@ class PlaylistApp:
         messagebox.showinfo("Cancelled", "Rendering dihentikan.")
 
     # ================= PLAYLIST =================
+    def clear_playlist(self):
+        self.playlist_files.clear()
+        self.update_playlist_box()
+        self.update_visual_button_state()
+
     def select_playlist_folder(self):
         folder = filedialog.askdirectory()
         if not folder:
             return
-        self.playlist_files = [
+
+        mp3_files = [
             os.path.join(folder, f)
             for f in os.listdir(folder)
-            if f.endswith(".mp3")
+            if f.lower().endswith(".mp3")
         ]
+
+        # append, bukan replace
+        self.playlist_files.extend(mp3_files)
+
+        # optional: remove duplicate
+        self.playlist_files = list(dict.fromkeys(self.playlist_files))
+
         self.update_playlist_box()
         self.update_visual_button_state()
+    def select_multiple_mp3(self):
+        files = filedialog.askopenfilenames(
+            title="Select MP3 Files",
+            filetypes=[("MP3 Files", "*.mp3")]
+        )
+
+        if not files:
+            return
+
+        # append
+        self.playlist_files.extend(files)
+
+        # remove duplicate
+        self.playlist_files = list(dict.fromkeys(self.playlist_files))
+
+        self.update_playlist_box()
+        self.update_visual_button_state()
+
+
     def update_playlist_box(self):
         self.playlist_box.delete(0, tk.END)
         for f in self.playlist_files:
             self.playlist_box.insert(tk.END, os.path.basename(f))
         self.update_visual_button_state()
+    
+
     def shuffle_playlist(self):
         random.shuffle(self.playlist_files)
         self.update_playlist_box()
+    def show_playlist_menu(self, event):
+        try:
+            self.playlist_box.selection_clear(0, tk.END)
+            self.playlist_box.selection_set(self.playlist_box.nearest(event.y))
+            self.playlist_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.playlist_menu.grab_release()
+    def delete_selected_song(self):
+        selected = self.playlist_box.curselection()
+        if not selected:
+            return
+
+        index = selected[0]
+
+        # hapus dari data
+        del self.playlist_files[index]
+
+        # refresh
+        self.update_playlist_box()
+        self.update_visual_button_state()
+
     # ================= BROWSE =================
     def browse_bg(self):
         path = filedialog.askopenfilename()

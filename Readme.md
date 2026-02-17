@@ -1,6 +1,5 @@
 # Readme
-Struktur folder dan file harus seperti ini:
-
+Download and extract Zip:
 folder/
 
 ├── PlaylistApp (executable file)
@@ -19,16 +18,22 @@ folder/
     pyinstaller app.py \
     --name PlaylistApp \
     --windowed \
-    --onefile \
+    --onedir \
+    --clean \
+    --noconfirm \
     --hidden-import=DownloadManager \
     --hidden-import=arabic_reshaper \
     --hidden-import=bidi.algorithm \
     --add-data "fonts:fonts" \
-    --add-data "bin:bin" \
-    --noconfirm
+    --add-data "bin:bin"
 
 ``
 # win build one dir
 ``
-    pyinstaller --noconfirm --clean --windowed --name PlaylistApp --add-data "fonts;fonts" --add-binary "bin/ffmpeg.exe;bin" --add-binary "bin/ffprobe.exe;bin" app.py
+    pyinstaller app.py --name PlaylistApp --windowed --noconfirm --clean `
+    --hidden-import arabic_reshaper `
+    --hidden-import bidi.algorithm `
+    --add-data "fonts;fonts" `
+    --add-binary "bin/ffmpeg.exe;bin" `
+    --add-binary "bin/ffprobe.exe;bin"
 ``
