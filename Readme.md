@@ -3,17 +3,9 @@ Struktur folder dan file harus seperti ini:
 
 folder/
 
-├── PlaylistApp.exe
+├── PlaylistApp (executable file)
 
-├── fonts/               ✅
-
-└── bin/
-
-    ├── ffmpeg           ✅
-    
-    ├── ffprobe          ✅
-    
-    └── yt-dlp           ✅
+├── _internal (Lib and module included ffmpeg etc.)
 
 
     ### app.py
