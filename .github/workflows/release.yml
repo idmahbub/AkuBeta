@@ -76,9 +76,18 @@ jobs:
         shell: powershell
         run: |
           choco install ffmpeg -y
+
           New-Item -ItemType Directory -Force -Path bin
-          copy C:\ProgramData\chocolatey\bin\ffmpeg.exe bin\
-          copy C:\ProgramData\chocolatey\bin\ffprobe.exe bin\
+
+          $ffmpeg = (Get-Command ffmpeg).Source
+          $ffprobe = (Get-Command ffprobe).Source
+
+          Write-Host "FFmpeg real path: $ffmpeg"
+          Write-Host "FFprobe real path: $ffprobe"
+
+          Copy-Item $ffmpeg bin\ffmpeg.exe
+          Copy-Item $ffprobe bin\ffprobe.exe
+
 
       - name: Build Windows (ONEDIR)
         if: runner.os == 'Windows'
