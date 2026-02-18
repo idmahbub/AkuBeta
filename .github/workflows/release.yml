@@ -51,7 +51,7 @@ jobs:
     needs: version
     strategy:
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-13]
 
     runs-on: ${{ matrix.os }}
 
