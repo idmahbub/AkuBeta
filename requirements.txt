@@ -5,3 +5,4 @@ pyinstaller
 arabic-reshaper
 python-bidi
 pygame
+mutagen
