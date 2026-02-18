@@ -98,6 +98,7 @@ jobs:
           pyinstaller app.py --name PlaylistApp --windowed --noconfirm --clean `
             --hidden-import arabic_reshaper `
             --hidden-import bidi.algorithm `
+            --collect-all mutagen `
             --add-data "fonts;fonts" `
             --add-binary "bin/ffmpeg.exe;bin" `
             --add-binary "bin/ffprobe.exe;bin"
@@ -131,6 +132,9 @@ jobs:
             --windowed \
             --noconfirm \
             --clean \
+            --hidden-import arabic_reshaper \
+            --hidden-import bidi.algorithm \
+            --collect-all mutagen \
             --add-data "fonts:fonts" \
             --add-data "bin:bin"
 
