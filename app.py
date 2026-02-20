@@ -14,6 +14,8 @@ from PIL import Image, ImageTk
 import pygame
 from bidi.algorithm import get_display
 from mutagen.mp3 import MP3
+import re
+import unicodedata
 # ================= CROSS PLATFORM FFMPEG =================
 def resource_path(relative_path):
     """
@@ -34,6 +36,31 @@ def wrap_text_by_chars(text, max_chars=28):
     for line in text.split("\n"):
         lines.extend(textwrap.wrap(line, max_chars))
     return "\n".join(lines)
+def clean_mp3_name(filename: str, raw_filter: str) -> str:
+    # ambil nama file tanpa extension
+    name = os.path.splitext(os.path.basename(filename))[0]
+    # normalisasi awal
+    name = name.replace("_", " ")
+    name = unicodedata.normalize("NFKC", name)
+    # samakan semua pipe
+    name = name.replace("｜", "|").replace("│", "|")
+    # remove slash
+    name = name.replace("⧸", "/")
+    # parsing filter user
+    filters = [f.strip() for f in raw_filter.split(",") if f.strip()]
+    # hapus filter user
+    for f in filters:
+        name = re.sub(
+            re.escape(f),
+            "",
+            name,
+            flags=re.IGNORECASE
+        )
+    # auto cut setelah |
+    name = re.sub(r"\|.*$", "", name)
+    # rapikan spasi
+    name = re.sub(r"\s+", " ", name).strip()
+    return name
 def ffmpeg_path(p):
     return p.replace("\\", "/").replace(":", "\\:")
 def find_binary(name):
@@ -62,43 +89,62 @@ def get_mp3_duration(file_path):
         return int(audio.info.length)
     except:
         return 0
+import random
+
 def get_safe_box_color_hex():
     """
-    Generate cinematic / modern playlist box color
-    dengan kontras text aman (WCAG-ish)
+    Generate cinematic dark box color + kontras text.
+    Return:
+        box_color  -> "RRGGBB"
+        text_color -> "RRGGBB"
     """
-    # 🎨 Curated modern dark palette (YouTube friendly)
-    palette = [
-        "1e1e2f",  # dark navy
-        "2b2d42",  # muted indigo
-        "14213d",  # deep blue
-        "1f2833",  # modern charcoal blue
-        "2d132c",  # dark plum
-        "3a0ca3",  # deep purple
-        "1b4332",  # dark emerald
-        "2c2c2c",  # clean dark gray
-        "3c096c",  # rich violet
-        "540b0e",  # dark cinematic red
+
+    # 🎨 Cinematic base palettes (dark movie tones)
+    palettes = [
+        (18, 32, 47),   # deep navy
+        (22, 40, 35),   # dark teal
+        (35, 22, 40),   # dark purple
+        (30, 30, 30),   # charcoal
+        (40, 28, 20),   # warm brown cinematic
+        (15, 45, 60),   # blue teal film
+        (25, 35, 28),   # forest dark
     ]
-    box_color = random.choice(palette)
-    # Convert hex to RGB
-    r = int(box_color[0:2], 16)
-    g = int(box_color[2:4], 16)
-    b = int(box_color[4:6], 16)
-    # WCAG luminance check
+
+    base_r, base_g, base_b = random.choice(palettes)
+
+    # 🎛 Tambah sedikit noise biar gak flat
+    r = min(255, max(0, base_r + random.randint(-15, 15)))
+    g = min(255, max(0, base_g + random.randint(-15, 15)))
+    b = min(255, max(0, base_b + random.randint(-15, 15)))
+
+    box_color = f"{r:02x}{g:02x}{b:02x}"
+
+    # ===== WCAG Luminance =====
     def luminance(r, g, b):
         def channel(c):
             c = c / 255.0
             return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
         return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
     lum = luminance(r, g, b)
-    # Text color auto contrast
-    text_color = "ffffff" if lum < 0.4 else "111111"
+
+    # ✨ Cinematic text choice
+    if lum < 0.35:
+        text_color = "f5f5f5@0.8"   # soft white (lebih elegan dari pure white)
+    else:
+        text_color = "111111@0.8"
+
     return box_color, text_color
+
+def get_random_bright_color():
+    return "FFEB3B"
+    #if random.random() < 0.7:
+    #    return "F9FF00"
+    #return random.choice(["00E5FF", "FF4081", "76FF03"])
 class PlaylistApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Video Playlist Generator FFmpeg PRO")
+        self.root.title("Video Playlist Generator PRO")
         screen_h = self.root.winfo_screenheight()
         screen_w = self.root.winfo_screenwidth()
         # kasih margin 120px biar aman dari dock & menu bar
@@ -121,6 +167,9 @@ class PlaylistApp:
         self.is_rendering = False
         self.process = None
         self.setup_dark_theme()
+        self.filter_var = tk.StringVar()
+        self.filtered_playlist_files = []
+        self.search_var = tk.StringVar()
         self.build_ui()
     def setup_dark_theme(self):
         style = ttk.Style()
@@ -136,6 +185,17 @@ class PlaylistApp:
             background=bg,
             foreground=text,
             fieldbackground=panel
+        )
+        style.configure("TCombobox", background=panel)
+        style.map("TCombobox",
+            fieldbackground=[
+                ("active", "#3c3c3c"),   # hover background
+                ("selected", bg)
+            ],
+            foreground=[
+                ("active", "white"),    # hover text putih
+                ("selected", "white")   # saat terpilih text putih
+            ]
         )
         style.configure("TFrame", background=bg)
         style.configure("Panel.TFrame", background=panel)
@@ -240,7 +300,7 @@ class PlaylistApp:
         x_box = W - box_width if position == "right" else 0
         self.box_color,self.text_color = get_safe_box_color_hex()
         box_color,text_color = self.box_color,self.text_color
-        shadow_color = "000000" if text_color == "ffffff" else "ffffff"
+        shadow_color = "000000@0.5" if text_color == "f5f5f5" else "ffffff@0.5"
         margin = 80
         if position == "left":
             alpha_expr = f"if(lte(X,{solid_width}),{max_alpha},{max_alpha}*(1-(X-{solid_width})/{fade_width}))"
@@ -250,8 +310,17 @@ class PlaylistApp:
             alpha_expr = f"if(gte(X,{fade_width}),{max_alpha},{max_alpha}*(X/{fade_width}))"
             text_align = "right"
             x_text = f"{x_box}+{box_width}-{margin}-text_w"
-        title_y = 300
-        spacing_between = 40  # jarak antara title dan subtitle
+        #adaptif font size berdasarkan jumlah line
+        from PIL import ImageFont
+        font_title = ImageFont.truetype(self.get_random_font(), 76)
+        title_lines = title_wrapped.split("\n")
+        line_spacing = 14
+        ascent, descent = font_title.getmetrics()
+        line_height = ascent + descent  # ini yang benar
+        title_text_height = (line_height * len(title_lines)) + (line_spacing * (len(title_lines) - 1))
+        title_y = 140
+        spacing_between = 30  # sedikit lebih aman
+        subtitle_y = title_y + title_text_height + spacing_between
         filter_complex = f"""
         [0:v]scale={W}:{H}[bg];
         color=size={box_width}x{H}:color={box_color},format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{alpha_expr}'[box];
@@ -260,14 +329,11 @@ class PlaylistApp:
             fontfile='{font_big}':
             textfile='{title_file}':
             fontsize=76:
-            fontcolor={text_color}:
+            fontcolor=0xffd700@0.8:
             text_align={text_align}:
             line_spacing=14:
             x={x_text}:
-            y=140:
-            shadowcolor={shadow_color}:
-            shadowx=4:
-            shadowy=4[tmp2];
+            y={title_y}[tmp2];
         [tmp2]drawtext=
             fontfile='{font_small}':
             textfile='{sub_file}':
@@ -276,10 +342,7 @@ class PlaylistApp:
             text_align={text_align}:
             line_spacing=10:
             x={x_text}:
-            y={title_y}+text_h+{spacing_between}:
-            shadowcolor={shadow_color}:
-            shadowx=3:
-            shadowy=3
+            y={subtitle_y}
         """
         filter_complex = "\n".join(line.strip() for line in filter_complex.splitlines() if line.strip())
         is_video = bg.lower().endswith((".mp4", ".mov", ".mkv", ".webm"))
@@ -338,19 +401,30 @@ class PlaylistApp:
     def generate_youtube_timestamps(self):
         timestamps = []
         current_time = 0
-        for i, file in enumerate(self.queue_files):
+        raw_filter = self.filter_var.get().strip()
+        for file in self.queue_files:
             duration = get_mp3_duration(file)
             minutes = int(current_time // 60)
             seconds = int(current_time % 60)
-            name = os.path.splitext(os.path.basename(file))[0]
-            name = name.replace("_", " ")
+            name = clean_mp3_name(file, raw_filter)
             timestamps.append(f"{minutes:02d}:{seconds:02d} - {name}")
             current_time += duration
         description_text = "\n".join(timestamps)
         prompt = self.generate_prompt_yt()
-        description_text = "📌 Timestamps:\n\n" + description_text + "\n\n" + "🎵 Enjoy the music! Don't forget to like, comment, and subscribe for more playlists!\n\n"+prompt
+        description_text = (
+            "📌 Timestamps:\n\n"
+            + description_text
+            + "\n\n🎵 Enjoy the music! Don't forget to like, comment, and subscribe for more playlists!\n\n"
+            + prompt
+            + "\n\nTimestamps:\n"
+            + description_text
+            + "\n\n=============\n\n"
+        )
         # Simpan ke file
-        desc_path = os.path.join(self.output_folder, f"{self.bg_name}_youtube_description.txt")
+        desc_path = os.path.join(
+            self.output_folder,
+            f"{self.bg_name}_youtube_description.txt"
+        )
         with open(desc_path, "w", encoding="utf-8") as f:
             f.write(description_text)
         return description_text
@@ -370,34 +444,47 @@ Rules:
   4. Tags separated by commas
 - Do not fabricate artist names if not provided.
 - Use natural Indonesian language.
+- D not include emojis.
 - Add call to action (like, comment, subscribe).
 Song List:
         """))
-        for i, path in enumerate(self.queue_files, 1):
-            name = os.path.basename(path)
-            lines.append(f"{i}. {name}")
-        lines.append("====================")
-        self.log("\n".join(lines))
         return "\n".join(lines)
     def log(self, text):
         self.root.after(0, lambda: (
             self.log_text.insert("end", text + "\n"),
             self.log_text.see("end")
         ))
+    #filter preview list
+    def filter_playlist(self, *_):
+        keyword = self.search_var.get().lower().strip()
+        if not keyword:
+            self.filtered_playlist_files = self.playlist_files.copy()
+        else:
+            self.filtered_playlist_files = [
+                f for f in self.playlist_files
+                if keyword in os.path.basename(f).lower()
+            ]
+        self.update_playlist_box(filtered=True)
+    def clear_search(self):
+        self.search_var.set("")
     #mainui
     def build_ui(self):
-            # ===== NOTEBOOK (TAB) =====
-            notebook = ttk.Notebook(self.root)
-            notebook.pack(fill="both", expand=True)
-            # ===== TAB GENERATE =====
-            self.tab_generate = ttk.Frame(notebook)
-            notebook.add(self.tab_generate, text="Generate")
-            # ===== TAB DOWNLOAD =====
-            self.tab_download = ttk.Frame(notebook)
-            notebook.add(self.tab_download, text="Download")
-            # build masing-masing tab
-            self.build_generate_tab(self.tab_generate)
-            self.build_download_tab(self.tab_download)
+        # ===== NOTEBOOK (TAB) =====
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(fill="both", expand=True)
+        # ===== TAB GENERATE =====
+        self.tab_generate = ttk.Frame(notebook)
+        notebook.add(self.tab_generate, text="Generate")
+        # ===== TAB DOWNLOAD =====
+        self.tab_download = ttk.Frame(notebook)
+        notebook.add(self.tab_download, text="Download")
+        # ===== TAB RENAME =====
+        self.tab_rename = ttk.Frame(notebook)
+        notebook.add(self.tab_rename, text="Bulk Rename")
+        # build masing-masing tab
+        self.build_generate_tab(self.tab_generate)
+        self.build_download_tab(self.tab_download)
+        self.build_rename_tab(self.tab_rename)
     # ================= UI =================
     def show_text_menu(self, event):
         try:
@@ -434,8 +521,20 @@ Song List:
         # ---- Thumbnail Title ----
         ttk.Label(left, text="Thumbnail Title")\
             .grid(row=2, column=0, sticky="w", pady=(10,0))
-        self.thumb_title_entry = ttk.Entry(left)
-        self.thumb_title_entry.grid(row=2, column=1, columnspan=2, sticky="ew", padx=5, pady=(10,0))
+        title_frame = ttk.Frame(left)
+        title_frame.grid(row=2, column=1, columnspan=2, sticky="ew", pady=(10,0))
+        title_frame.columnconfigure(0, weight=1)
+        self.thumb_title_entry = ttk.Entry(title_frame)
+        self.thumb_title_entry.grid(row=0, column=0, sticky="ew", padx=(5,5))
+        self.add_to_final_var = tk.StringVar(value="")
+        self.add_to_final_combo = ttk.Combobox(
+            title_frame,
+            textvariable=self.add_to_final_var,
+            values=["", "left video", "center video", "right video"],
+            state="readonly",
+            width=10
+        )
+        self.add_to_final_combo.grid(row=0, column=1, sticky="e")
         # ---- Thumbnail Sub Text ----
         ttk.Label(left, text="Thumbnail Sub Text")\
             .grid(row=3, column=0, sticky="w", pady=(5,0))
@@ -450,12 +549,12 @@ Song List:
         playlist_row.columnconfigure(3, weight=0)
         ttk.Button(
             playlist_row,
-            text="Select Folder",
+            text="MP3 Folder",
             command=self.select_playlist_folder
         ).grid(row=0, column=0, sticky="ew")
         ttk.Button(
             playlist_row,
-            text="Select MP3 Files",
+            text="MP3 Files",
             command=self.select_multiple_mp3
         ).grid(row=0, column=1, sticky="ew", padx=5)
         ttk.Button(
@@ -472,11 +571,36 @@ Song List:
         list_frame.columnconfigure(1, weight=0)  # Tombol kecil
         list_frame.columnconfigure(2, weight=5)  # Queue sama besar
         list_frame.rowconfigure(0, weight=1)
-        # --- LISTBOX 1 (Preview) ---
+        # --- LISTBOX 1 (Preview + Search) ---
         preview_container = ttk.Frame(list_frame)
         preview_container.grid(row=0, column=0, sticky="nsew", padx=(0,5))
-        preview_container.grid_rowconfigure(0, weight=1)
-        preview_container.grid_columnconfigure(0, weight=1)
+        # ⬇️ penting: sekarang ada 2 row
+        preview_container.rowconfigure(0, weight=0)  # search
+        preview_container.rowconfigure(1, weight=1)  # listbox
+        preview_container.columnconfigure(0, weight=1)
+        # 🔎 SEARCH BOX
+        search_frame = ttk.Frame(preview_container)
+        search_frame.grid(row=0, column=0, sticky="ew", pady=(0,5))
+        search_frame.columnconfigure(0, weight=1)
+        self.search_var = tk.StringVar()
+        search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
+        search_entry.grid(row=0, column=0, sticky="ew", padx=(0,5), ipady=2)
+        clear_btn = tk.Label(
+            search_frame,
+            text="✖",
+            bg="#2b2b2b",
+            fg="#eaeaea",
+            padx=6,
+            pady=2,
+            cursor="hand2"
+        )
+        clear_btn.grid(row=0, column=1, pady=1)
+        clear_btn.bind("<Button-1>", lambda e: self.clear_search())
+        # hover effect
+        clear_btn.bind("<Enter>", lambda e: clear_btn.config(bg="#ff5252"))
+        clear_btn.bind("<Leave>", lambda e: clear_btn.config(bg="#2b2b2b"))
+        self.search_var.trace_add("write", self.filter_playlist)
+        # 🎵 LISTBOX
         self.preview_box = tk.Listbox(
             preview_container,
             bg="#2b2b2b",
@@ -486,9 +610,12 @@ Song List:
             borderwidth=0,
             highlightthickness=0
         )
-        self.preview_box.grid(row=0, column=0, sticky="nsew")
-        preview_scroll = ttk.Scrollbar(preview_container, command=self.preview_box.yview)
-        preview_scroll.grid(row=0, column=1, sticky="ns")
+        self.preview_box.grid(row=1, column=0, sticky="nsew")
+        preview_scroll = ttk.Scrollbar(
+            preview_container,
+            command=self.preview_box.yview
+        )
+        preview_scroll.grid(row=1, column=1, sticky="ns")
         self.preview_box.config(yscrollcommand=preview_scroll.set)
         # --- MIDDLE BUTTONS ---
         btn_frame = ttk.Frame(list_frame)
@@ -580,7 +707,7 @@ Song List:
         controls.columnconfigure(5, weight=0)
         controls.columnconfigure(6, weight=0)
         # ===== KIRI : Box Position =====
-        ttk.Label(controls, text="Playlist Position:").grid(row=0, column=0, sticky="w")
+        ttk.Label(controls, text="").grid(row=0, column=0, sticky="w")
         self.box_position_var = tk.StringVar(value="left")
         ttk.Radiobutton(
             controls,
@@ -594,6 +721,16 @@ Song List:
             value="right",
             variable=self.box_position_var
         ).grid(row=0, column=2, padx=5)
+        # ===== TENGAH : Filter String =====
+        filter_frame = ttk.Frame(controls)
+        filter_frame.grid(row=0, column=3, sticky="e", padx=(0, 10))
+        ttk.Label(filter_frame, text="Remove Text:").pack(side="left", padx=(0, 5))
+        self.filter_entry = ttk.Entry(
+            filter_frame,
+            textvariable=self.filter_var,
+            width=22
+        )
+        self.filter_entry.pack(side="left")
         # ===== KANAN : Buttons =====
         self.btn_visual = ttk.Button(
             controls,
@@ -748,8 +885,12 @@ Song List:
         self.preview_label.config(image=photo)
         self.preview_label.image = photo 
     def build_download_tab(self, parent):
-        from DownloadManager import DownloadManager
+        from downloadmanager import DownloadManager
         self.download_manager = DownloadManager(parent)
+    def build_rename_tab(self, parent):
+        from rename import RenameTab
+        self.rename_tab = RenameTab(self)
+        self.rename_tab.build(self.tab_rename)
     # ================= STATE =================
     def set_rendering_state(self, rendering):
         self.is_rendering = rendering
@@ -828,6 +969,8 @@ Song List:
         if not bg or not os.path.exists(bg):
             messagebox.showerror("Error", "Background image belum dipilih")
             return
+        screen_width = 1920
+        screen_height = 1080
         # somefolder (parent dari folder visual)
         visual_dir = os.path.dirname(os.path.abspath(bg))       # somefolder/visual
         base_dir = os.path.dirname(visual_dir)                  # somefolder
@@ -857,8 +1000,10 @@ Song List:
         font_path = ffmpeg_path(self.get_random_font())
         # ================= CREATE PLAYLIST TEXT =================
         playlist_text = []
+        raw_filter = self.filter_var.get().strip()
         for i, fpath in enumerate(self.queue_files, start=1):
             name = os.path.basename(fpath).replace(".mp3", "").replace("_", " ")
+            name = clean_mp3_name(name, raw_filter)
             mixed_text = f"{i:02d}. {name}"
             fixed_text = fix_mixed_text(mixed_text)
             playlist_text.append(fixed_text)
@@ -870,16 +1015,33 @@ Song List:
             f.write(playlist_text_str)
         text_file = ffmpeg_path(text_file_os)
         # ================= CALCULATE BOX SIZE =================
-        fontsize = 42
-        line_spacing = max(6, int(fontsize * 0.12))
-        screen_width = 1920
-        screen_height = 1080
-        box_width = int(screen_width * 0.50)  # 65% dari layar
-        position = self.box_position_var.get()  # 'left' atau 'right'
+        num_lines = max(1, len(playlist_text))
+        available_height = int(screen_height * 0.70)  # lebih aman
+        # hitung font size ideal
+        fontsize = int((available_height / num_lines) * 0.75)
+        # clamp khusus playlist
+        fontsize = max(22, min(fontsize, 42))
+        # jarak antar baris (lebih rapat)
+        line_spacing = int(fontsize * 0.18)
+        box_width = int(screen_width * 0.50)
+        position = self.box_position_var.get()  # 'left' / 'right'
+        if num_lines <= 5:
+            fontsize = min(fontsize + 6, 42)
         if position == "left":
             x_box = 0
         else:
             x_box = screen_width - box_width
+        title_position = self.add_to_final_var.get()
+        if title_position == "left video":
+            title_x = "80"
+            title_align = "left"
+        elif title_position == "right video":
+            title_x = f"{screen_width}-tw-80"
+            title_align = "right"
+        elif title_position == "center video":
+            title_x = "(w-text_w)/2"
+            title_align = "center"
+        title_y = "60"
         margin = 80
         if position == "left":
             x_drawtext = x_box + margin
@@ -907,6 +1069,27 @@ Song List:
             self.box_color, self.text_color = get_safe_box_color_hex()
         box_color,text_color = self.box_color,self.text_color
         shadow_color = "000000" if text_color == "ffffff" else "ffffff"
+        #add title text thumbnail ke video kalau checkboxnya dicek
+        title_filter = ""
+        random_color = get_random_bright_color()
+        if title_position != "":
+            thumb_title = self.thumb_title_entry.get().upper()
+            thumb_title = thumb_title.replace(":", "\\:").replace("'", "\\'")
+            title_filter = (
+                f",drawtext="
+                f"fontfile='{font_path}':"
+                f"text='{thumb_title}':"
+                f"text_align={title_align}:"
+                f"fontcolor=0x{random_color}:"
+                f"fontsize=160:"
+                f"x={title_x}:"
+                f"y=80:"
+                f"borderw=10:"
+                f"bordercolor=0x{box_color}:"
+                f"shadowcolor=0x{box_color}:"
+                f"shadowx=3:"
+                f"shadowy=3"
+            )
         if has_overlay:
             filter_complex = (
                 f"[0:v]scale={screen_width}:{screen_height}[bg];"
@@ -921,10 +1104,11 @@ Song List:
                 f"fontsize={fontsize}:"
                 f"line_spacing={line_spacing}:"
                 f"x={x_drawtext}:"
-                f"y={y_drawtext}:"
+                #f"y={y_drawtext}:"
+                f"y=(h-text_h)/2:"
                 f"shadowcolor=0x{shadow_color}:"
-                f"shadowx=3:"
-                f"shadowy=3[bg_text];"
+                f"shadowx=1:"
+                f"shadowy=1{title_filter}[bg_text];"
                 f"[1:v]scale={screen_width}:{screen_height},format=yuva420p,"
                 f"colorchannelmixer=aa=0.3[ov];"
                 f"[bg_text][ov]overlay=0:0"
@@ -943,10 +1127,11 @@ Song List:
                 f"fontsize={fontsize}:"
                 f"line_spacing={line_spacing}:"
                 f"x={x_drawtext}:"
-                f"y={y_drawtext}:"
+                #f"y={y_drawtext}:"
+                f"y=(h-text_h)/2:"
                 f"shadowcolor=0x{shadow_color}:"
-                f"shadowx=3:"
-                f"shadowy=3"
+                f"shadowx=1:"
+                f"shadowy=1{title_filter}"
             )
         output_path = os.path.join(self.output_folder, f"{self.bg_name}_visual_playlist.mp4")
         cmd = [
@@ -963,6 +1148,10 @@ Song List:
             "-crf", "28",
             output_path
         ]
+        duration = 5 if (not has_overlay and not is_bg_video) else None
+        if duration:
+            idx = cmd.index("-shortest")
+            cmd[idx:idx] = ["-t", str(duration)]
         self.run_ffmpeg(cmd, total_duration=60)  # <-- total_duration bisa disesuaikan
         self.play_video_preview(output_path)
     # ================= FINAL =================
@@ -1025,6 +1214,10 @@ Song List:
         self.log("Play list generated")
         self.queue_files.clear()
         self.root.after(0, self.update_queue_box)
+        os.remove(list_path)
+        os.remove(combined_path)
+        os.remove(visual_path)
+        self.rename_bg_file()
     # ================= RUN FFMPEG =================
     def run_ffmpeg(self, cmd, total_duration):
         if not isinstance(cmd, list):
@@ -1090,6 +1283,30 @@ Song List:
         self.process = None
         self.root.after(0, lambda: self.progress.config(value=0))
         self.log("Rendering dihentikan.")
+    # ================= Rename Bg agar tidak di pakai lagi =================
+    def rename_bg_file(self):
+        old_path = self.bg_entry.get()
+
+        if not old_path or not os.path.exists(old_path):
+            return
+
+        folder = os.path.dirname(old_path)
+        filename = os.path.basename(old_path)
+
+        new_filename = "used_" + filename
+        new_path = os.path.join(folder, new_filename)
+
+        # kalau sudah ada file dengan nama itu, jangan overwrite
+        if os.path.exists(new_path):
+            print("File sudah ada:", new_filename)
+            return
+
+        os.rename(old_path, new_path)
+
+        # update entry supaya path ikut berubah
+        self.bg_entry.delete(0, "end")
+        self.bg_entry.insert(0, new_path)
+        self.log(f"Background file renamed to: {new_filename}")
     # ================= PLAYLIST =================
     def clear_playlist(self):
         self.playlist_files.clear()
@@ -1123,10 +1340,16 @@ Song List:
         self.playlist_files = list(dict.fromkeys(self.playlist_files))
         self.update_playlist_box()
         self.update_visual_button_state()
-    def update_playlist_box(self):
+    def update_playlist_box(self, filtered=False):
         self.preview_box.delete(0, tk.END)
-        for f in self.playlist_files:
-            self.preview_box.insert(tk.END, os.path.basename(f))
+        if not filtered:
+            self.filtered_playlist_files = self.playlist_files.copy()
+        for f in self.filtered_playlist_files:
+            name = os.path.basename(f)
+            duration = get_mp3_duration(f)
+            formatted = format_time(duration)
+            display_text = f"{name}  ({formatted})"
+            self.preview_box.insert(tk.END, display_text)
         self.update_visual_button_state()
     def update_queue_box(self):
         self.queue_box.delete(0, tk.END)
@@ -1142,8 +1365,8 @@ Song List:
         total_formatted = format_time(total_seconds)
         self.log(f"Total playlist duration: {total_formatted}")
     def shuffle_playlist(self):
-        random.shuffle(self.playlist_files)
-        self.update_playlist_box()
+        random.shuffle(self.queue_files)
+        self.update_queue_box()
     def show_playlist_menu(self, event):
         try:
             self.preview_box.selection_clear(0, tk.END)
@@ -1156,10 +1379,10 @@ Song List:
         if not selected:
             return
         index = selected[0]
-        # hapus dari data
-        del self.playlist_files[index]
-        # refresh
-        self.update_playlist_box()
+        file_path = self.filtered_playlist_files[index]
+        if file_path in self.playlist_files:
+            self.playlist_files.remove(file_path)
+        self.filter_playlist()
         self.update_visual_button_state()
     #preview mp3
     def toggle_play(self):
@@ -1223,25 +1446,28 @@ Song List:
         selected = self.preview_box.curselection()
         if not selected:
             return
-        # Ambil berdasarkan index dari belakang supaya aman saat delete
         for index in reversed(selected):
-            file_path = self.playlist_files[index]
-            # Pindahkan
+            # ambil dari filtered list
+            file_path = self.filtered_playlist_files[index]
+            # hapus dari playlist utama
+            if file_path in self.playlist_files:
+                self.playlist_files.remove(file_path)
+            # masukkan ke queue
             self.queue_files.append(file_path)
-            del self.playlist_files[index]
-        self.update_playlist_box()
+        # refresh filter ulang
+        self.filter_playlist()
         self.update_queue_box()
+        self.update_visual_button_state()
     def remove_from_queue(self):
         selected = self.queue_box.curselection()
         if not selected:
             return
         for index in reversed(selected):
-            file_path = self.queue_files[index]
-            # Balik ke preview
-            self.playlist_files.append(file_path)
-            del self.queue_files[index]
+            file_path = self.queue_files.pop(index)     # hapus dari queue
+            self.playlist_files.append(file_path)       # kembalikan ke preview
         self.update_playlist_box()
         self.update_queue_box()
+        self.update_visual_button_state()
     # ================= BROWSE =================
     def browse_bg(self):
         path = filedialog.askopenfilename()
