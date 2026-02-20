@@ -885,7 +885,7 @@ Song List:
         self.preview_label.config(image=photo)
         self.preview_label.image = photo 
     def build_download_tab(self, parent):
-        from downloadmanager import DownloadManager
+        from DownloadManager import DownloadManager
         self.download_manager = DownloadManager(parent)
     def build_rename_tab(self, parent):
         from rename import RenameTab
